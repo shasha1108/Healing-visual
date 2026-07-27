@@ -1,0 +1,1426 @@
+<!--
+Title: 潮汐保管处
+Summary: 按住一团由未完成感缠成的暗结，松手后把它交给潮汐；海会替你拆开、带走，并留下回应。
+Tech: Three.js Gerstner ocean, Canvas 2D thread field, Web Audio API, deterministic seed
+Keywords: fatigue, handoff, tide, release, aftercare
+Render: Three.js WebGL background plus Canvas 2D foreground
+Audio: optional synthesized pink-noise tide and causal 216/432Hz response tone
+Touch: one press-and-release handoff; the world completes the release
+Repo: local healing-space-workspace
+-->
+<!doctype html>
+<!--
+  Title: Tide-Keeping Station · 潮汐保管处
+  Tech: Three.js, Canvas 2D, WebGL, Web Audio API
+  Keywords: canvas 2d, three.js, webgl, web audio api, touch interaction, glsl shader
+  Features: Gerstner-wave Three.js ocean with a Canvas 2D thread-field foreground; a press-and-release handoff ritual backed by synthesized pink-noise tide audio and a 216/432Hz response tone
+  Render: WebGL (Three.js)
+  Audio: yes
+  Touch: yes
+  Particles: N/A
+  Standalone: yes, single HTML file, 1 CDN dependencies
+  Repo: https://github.com/shasha1108/healing-visual-lab
+--><html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="theme-color" content="#0a1628">
+  <title>潮汐保管处</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: 225, 230, 226;
+      --mist: 90, 154, 192;
+      --warm: 200, 168, 96;
+      --entry: 0;
+      --calm: 0;
+    }
+
+    * {
+      box-sizing: border-box;
+      cursor: none !important;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      overscroll-behavior: none;
+      touch-action: none;
+    }
+
+    body {
+      position: relative;
+      background:
+        radial-gradient(circle at 74% 30%, rgba(84, 112, 140, .20), transparent 29%),
+        linear-gradient(158deg, #182a42 0%, #0d1d33 48%, #0a1728 100%);
+      color: rgba(var(--ink), .9);
+      font-family: "Songti SC", "STSong", "Noto Serif CJK SC", serif;
+      user-select: none;
+      transition: background-color 1.6s ease;
+    }
+
+    #atmosphere,
+    #webgl,
+    #threads,
+    #grain,
+    #vignette,
+    #ui {
+      position: fixed;
+      inset: 0;
+    }
+
+    #atmosphere {
+      z-index: 0;
+      pointer-events: none;
+      opacity: calc(.16 + var(--calm) * .84);
+      background:
+        radial-gradient(ellipse at 78% 38%,
+          rgba(var(--warm), calc(var(--calm) * .23)) 0%,
+          rgba(128, 154, 170, calc(var(--calm) * .09)) 21%,
+          transparent 53%),
+        linear-gradient(to top,
+          rgba(176, 178, 157, calc(var(--calm) * .10)),
+          transparent 42%);
+      mix-blend-mode: screen;
+      transition: opacity 1.2s ease;
+    }
+
+    #webgl {
+      z-index: 1;
+      width: 100%;
+      height: 100%;
+      opacity: calc(.28 + var(--entry) * .72);
+      transition: opacity 1.4s ease;
+    }
+
+    #threads {
+      z-index: 2;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      mix-blend-mode: screen;
+    }
+
+    #grain {
+      z-index: 3;
+      pointer-events: none;
+      opacity: .085;
+      background-image:
+        repeating-radial-gradient(circle at 19% 37%,
+          rgba(244, 240, 232, .14) 0,
+          rgba(244, 240, 232, .14) .45px,
+          transparent .7px,
+          transparent 3.2px);
+      background-size: 7px 9px;
+      mix-blend-mode: soft-light;
+      transform: rotate(.4deg) scale(1.04);
+    }
+
+    #vignette {
+      z-index: 4;
+      pointer-events: none;
+      background:
+        radial-gradient(ellipse at 62% 46%,
+          transparent 15%,
+          rgba(5, 12, 22, .08) 55%,
+          rgba(3, 9, 16, .44) 108%);
+    }
+
+    #ui {
+      z-index: 5;
+      pointer-events: none;
+    }
+
+    .copy {
+      display: none;
+      position: absolute;
+      left: clamp(24px, 7vw, 108px);
+      bottom: clamp(34px, 12vh, 124px);
+      width: min(520px, 77vw);
+      opacity: 0;
+      transform: translate3d(0, 16px, 0);
+    }
+
+    .copy h1 {
+      max-width: 480px;
+      margin: 0;
+      font-size: clamp(22px, 3.35vw, 42px);
+      line-height: 1.58;
+      letter-spacing: 12px;
+      font-weight: 200;
+      color: rgba(232, 234, 226, .90);
+      text-wrap: balance;
+      text-shadow: 0 0 28px rgba(188, 214, 226, .08);
+    }
+
+    .copy p {
+      margin: 18px 0 0;
+      font-size: clamp(11px, 1.25vw, 14px);
+      line-height: 2;
+      letter-spacing: 10px;
+      font-weight: 200;
+      color: rgba(205, 216, 220, .52);
+    }
+
+    body[data-phase="recognize"] .copy--recognize,
+    body[data-phase="handoff"] .copy--handoff,
+    body[data-phase="release"] .copy--release,
+    body[data-phase="respond"] .copy--respond {
+      display: block;
+      animation: copy-enter 1.05s cubic-bezier(.16, .8, .2, 1) both;
+    }
+
+    @keyframes copy-enter {
+      from {
+        opacity: 0;
+        transform: translate3d(0, 14px, 0);
+      }
+      to {
+        opacity: var(--entry);
+        transform: translate3d(0, 0, 0);
+      }
+    }
+
+    body[data-phase="respond"] .copy h1 {
+      color: rgba(235, 229, 210, .93);
+      text-shadow: 0 0 32px rgba(var(--warm), .14);
+    }
+
+    #sound-mark {
+      position: absolute;
+      top: clamp(20px, 5vh, 48px);
+      left: clamp(24px, 7vw, 108px);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      opacity: calc(.18 + var(--entry) * .30);
+      color: rgba(207, 221, 224, .62);
+      font-family: "Songti SC", "STSong", serif;
+      font-size: 10px;
+      letter-spacing: 8px;
+      transition: opacity .8s ease;
+    }
+
+    #sound-mark::before {
+      content: "";
+      width: 5px;
+      height: 5px;
+      border: 1px solid rgba(184, 211, 220, .55);
+      border-radius: 50%;
+      box-shadow: 0 0 12px rgba(184, 211, 220, .18);
+    }
+
+    /* 潮痕卡：终态长按提示 + 全屏信物覆盖层 */
+    #keepsake-hint {
+      position: absolute;
+      right: clamp(24px, 7vw, 108px);
+      bottom: clamp(34px, 12vh, 124px);
+      font-size: 11px;
+      letter-spacing: 6px;
+      font-weight: 200;
+      color: rgba(235, 229, 210, .45);
+      opacity: 0;
+      transition: opacity 1.6s ease 2.2s;
+      pointer-events: none;
+    }
+
+    body[data-phase="respond"] #keepsake-hint {
+      opacity: 1;
+    }
+
+    #keepsake-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 30;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(3, 9, 16, .88);
+      backdrop-filter: blur(10px);
+      touch-action: auto;
+    }
+
+    #keepsake-overlay.show {
+      display: flex;
+    }
+
+    #keepsake-overlay img {
+      max-width: 82vw;
+      max-height: 76vh;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, .6);
+      pointer-events: auto;
+      touch-action: auto;
+      user-select: auto;
+      -webkit-user-select: auto;
+      -webkit-touch-callout: default;
+    }
+
+    #keepsake-overlay .hint {
+      position: absolute;
+      bottom: 5vh;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 11px;
+      letter-spacing: 6px;
+      color: rgba(235, 229, 210, .5);
+    }
+
+    body[data-audio="running"] #sound-mark::before {
+      background: rgba(194, 220, 226, .68);
+      box-shadow: 0 0 16px rgba(194, 220, 226, .42);
+    }
+
+    #spirit-cursor {
+      position: fixed;
+      z-index: 9;
+      left: 0;
+      top: 0;
+      width: 28px;
+      height: 28px;
+      margin: -14px 0 0 -14px;
+      opacity: 0;
+      border: 1px solid rgba(204, 225, 229, .58);
+      border-radius: 50%;
+      pointer-events: none;
+      transform: translate3d(-80px, -80px, 0);
+      box-shadow:
+        0 0 20px rgba(126, 184, 207, .15),
+        inset 0 0 12px rgba(203, 224, 225, .08);
+      transition:
+        opacity .28s ease,
+        width .55s cubic-bezier(.16, .8, .2, 1),
+        height .55s cubic-bezier(.16, .8, .2, 1),
+        border-color .55s ease;
+      mix-blend-mode: screen;
+    }
+
+    body[data-pressed="true"] #spirit-cursor {
+      width: 54px;
+      height: 54px;
+      margin: -27px 0 0 -27px;
+      border-color: rgba(var(--warm), .58);
+    }
+
+    #status {
+      position: fixed;
+      left: 8px;
+      bottom: 6px;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      opacity: 0;
+      font-family: ui-monospace, monospace;
+      letter-spacing: 0;
+      pointer-events: none;
+    }
+
+    @media (max-width: 720px) {
+      .copy {
+        left: 24px;
+        bottom: max(34px, 8vh);
+        width: calc(100vw - 48px);
+      }
+
+      .copy h1 {
+        max-width: 320px;
+        font-size: clamp(21px, 7vw, 30px);
+        letter-spacing: 9px;
+      }
+
+      .copy p {
+        max-width: 310px;
+        font-size: 11px;
+        letter-spacing: 8px;
+      }
+
+      #sound-mark {
+        left: 24px;
+        letter-spacing: 6px;
+      }
+    }
+
+    @media (pointer: coarse) {
+      #spirit-cursor {
+        display: none;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .copy,
+      #webgl,
+      #atmosphere {
+        transition-duration: .4s;
+      }
+
+      body[data-phase] .copy {
+        animation-duration: .4s;
+      }
+    }
+  </style>
+</head>
+<body
+  data-phase="recognize"
+  data-calm="0.000"
+  data-history="recognize"
+  data-audio="inactive"
+  data-pressed="false"
+  data-entry="arriving"
+>
+  <div id="atmosphere" aria-hidden="true"></div>
+  <canvas id="webgl" aria-hidden="true"></canvas>
+  <canvas id="threads" aria-hidden="true"></canvas>
+  <div id="grain" aria-hidden="true"></div>
+  <div id="vignette" aria-hidden="true"></div>
+
+  <main id="ui" aria-live="polite">
+    <section class="copy copy--recognize">
+      <h1>有些焦虑，已经困扰了你太久。</h1>
+      <p>按住那团结，然后松开手，让它坠向大海。</p>
+    </section>
+    <section class="copy copy--handoff">
+      <h1>海接住了它。</h1>
+      <p>现在，把手收回来。</p>
+    </section>
+    <section class="copy copy--release">
+      <h1>潮汐正在替你融化它。</h1>
+      <p>你看，已经全部松解开了。</p>
+    </section>
+    <section class="copy copy--respond">
+      <h1>以后，它不会再成为你的烦恼。</h1>
+      <p>大海会帮你带走它。</p>
+    </section>
+    <div id="sound-mark">触碰，唤醒回声</div>
+    <div id="keepsake-hint">长按，带走这枚退潮的印记</div>
+    <output id="status">recognize:0.000</output>
+  </main>
+
+  <div id="keepsake-overlay">
+    <img id="keepsake-img" alt="今晚的潮痕">
+    <div class="hint">长按图片保存 · 点按空白处返回</div>
+  </div>
+
+  <div id="spirit-cursor" aria-hidden="true"></div>
+
+  <script type="application/json" id="healing-metadata">
+    {
+      "title": "潮汐保管处",
+      "summary": "按住一团由未完成感缠成的暗结，松手后把它交给潮汐；海会替你拆开、带走，并留下回应。",
+      "tech": ["Three.js Gerstner ocean", "Canvas 2D thread field", "Web Audio API", "deterministic seed", "keepsake card export"],
+      "keywords": ["fatigue", "handoff", "tide", "release", "aftercare"],
+      "render": "Three.js WebGL background plus Canvas 2D foreground",
+      "audio": "optional synthesized pink-noise tide and causal 216/432Hz response tone",
+      "touch": "one press-and-release handoff; the world completes the release",
+      "repo": "local healing-space-workspace"
+    }
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
+  <script>
+    'use strict';
+
+    const SELECTED_ARC = 'recognize-handoff-release-respond';
+    const CALM_LERP_SPEED = 1.5;
+    const IS_MOBILE = matchMedia('(max-width: 720px), (pointer: coarse)').matches;
+    const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    function mulberry32(a) {
+      return function rngValue() {
+        a |= 0;
+        a = a + 0x6D2B79F5 | 0;
+        let t = Math.imul(a ^ a >>> 15, 1 | a);
+        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      };
+    }
+
+    const SEED = (() => {
+      const hash = location.hash;
+      if (hash && hash.startsWith('#seed=')) {
+        const parsed = parseInt(hash.replace('#seed=', ''), 10);
+        if (!Number.isNaN(parsed)) return parsed;
+      }
+      return 1709;
+    })();
+    const rng = mulberry32(SEED);
+    console.info('[healing-space] seed=' + SEED);
+
+    const body = document.body;
+    const webglCanvas = document.getElementById('webgl');
+    const threadCanvas = document.getElementById('threads');
+    const threadCtx = threadCanvas.getContext('2d');
+    const statusEl = document.getElementById('status');
+    const spiritCursor = document.getElementById('spirit-cursor');
+
+    const State = {
+      selected_arc: SELECTED_ARC,
+      phase: 'recognize',
+      history: ['recognize'],
+      calm: 0,
+      calmTarget: 0,
+      handoffReceived: false,
+      receivePulse: 0,
+      releaseT: 0,
+      relEased: 0,
+      lastRelEased: 0,
+      missPulse: 0,
+      interactCount: 0,
+      knotMode: 'idle',
+      time: 0,
+      entry: 0,
+      entryTarget: 1,
+      responseSoundPlayed: false,
+      width: innerWidth,
+      height: innerHeight,
+      dpr: 1
+    };
+    window.__TIDE_STATE = State;
+
+    function clamp01(value) {
+      return Math.max(0, Math.min(1, value));
+    }
+
+    function smooth01(value) {
+      const c = clamp01(value);
+      return c * c * (3 - 2 * c);
+    }
+
+    function lerp(a, b, t) {
+      return a + (b - a) * t;
+    }
+
+    function transition(next) {
+      if (State.phase === next) return;
+      State.phase = next;
+      State.history.push(next);
+      body.dataset.phase = next;
+      if (next === 'respond') {
+        State.knotMode = 'react';
+        strikeResponseTone();
+      }
+    }
+
+    const cursor = {
+      x: -80,
+      y: -80,
+      targetX: -80,
+      targetY: -80,
+      visible: false
+    };
+
+    function revealCursor(event) {
+      cursor.targetX = event.clientX;
+      cursor.targetY = event.clientY;
+      if (!cursor.visible) {
+        cursor.x = event.clientX;
+        cursor.y = event.clientY;
+        cursor.visible = true;
+        spiritCursor.style.opacity = '1';
+      }
+    }
+
+    addEventListener('pointermove', revealCursor, { passive: true });
+
+    function updateCursor() {
+      cursor.x += (cursor.targetX - cursor.x) * 0.11;
+      cursor.y += (cursor.targetY - cursor.y) * 0.11;
+      spiritCursor.style.transform =
+        'translate3d(' + cursor.x.toFixed(2) + 'px,' + cursor.y.toFixed(2) + 'px,0)';
+    }
+
+    const renderer = new THREE.WebGLRenderer({
+      canvas: webglCanvas,
+      antialias: !IS_MOBILE,
+      alpha: true,
+      powerPreference: 'high-performance'
+    });
+    renderer.setPixelRatio(Math.min(devicePixelRatio || 1, IS_MOBILE ? 1.35 : 1.8));
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 0.82;
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x0a1628, 0.0014);
+
+    const camera = new THREE.PerspectiveCamera(68, innerWidth / innerHeight, 0.1, 180);
+    const cameraBase = { x: -1.8, y: 6.4, z: 13.4, fov: 51 };
+    camera.position.set(-3.6, 10.8, 22);
+    camera.lookAt(0, -0.55, -7);
+
+    const WAVE_COUNT = 6;
+    const waveDefs = [
+      [ 0.72,  0.69, 0.42, 0.72, 0.52],
+      [ 0.91,  0.41, 0.68, 0.44, 0.56],
+      [ 0.42,  0.91, 0.81, 0.32, 0.48],
+      [ 0.96, -0.28, 1.18, 0.18, 0.61],
+      [ 0.58, -0.81, 1.46, 0.12, 0.55],
+      [-0.36,  0.93, 1.72, 0.08, 0.44]
+    ];
+
+    const waveUniforms = waveDefs.map((wave, index) => {
+      const amplitude = IS_MOBILE && index > 2 ? 0 : wave[3];
+      return new THREE.Vector4(wave[0], wave[1], wave[2], amplitude);
+    });
+    const steepUniforms = waveDefs.map(wave => new THREE.Vector4(wave[4], 0, 0, 0));
+
+    const oceanUniforms = {
+      uTime: { value: 0 },
+      uWaves: { value: waveUniforms },
+      uSteep: { value: steepUniforms },
+      uWaveAmplitude: { value: 0.82 },
+      uChoppiness: { value: 0.76 },
+      uFoamThreshold: { value: 0.10 },
+      uFoamIntensity: { value: 0.58 },
+      uDeepColor: { value: new THREE.Color(0x071523) },
+      uShallowColor: { value: new THREE.Color(0x244b68) },
+      uSkyColor: { value: new THREE.Color(0x182d43) },
+      uHorizonColor: { value: new THREE.Color(0x526c79) },
+      uFoamColor: { value: new THREE.Color(0xb9c9c8) },
+      uWarmColor: { value: new THREE.Color(0xc8a860) },
+      uWaterClarity: { value: 0.36 },
+      uFogDensity: { value: 0.0014 },
+      uSunIntensity: { value: 0.42 },
+      uTransition: { value: 0 },
+      uViewPos: { value: camera.position.clone() }
+    };
+
+    const oceanVertex = [
+      'uniform float uTime;',
+      'uniform vec4 uWaves[6];',
+      'uniform vec4 uSteep[6];',
+      'uniform float uWaveAmplitude;',
+      'uniform float uChoppiness;',
+      'uniform float uFoamThreshold;',
+      'varying vec3 vWorldPos;',
+      'varying vec3 vNormal;',
+      'varying float vFoam;',
+      'varying float vHeight;',
+      'const float G = 9.81;',
+      'void main(){',
+      '  vec3 base = position;',
+      '  vec3 p = vec3(base.x, 0.0, base.z);',
+      '  float dxx=0.0; float dxz=0.0; float dzx=0.0; float dzz=0.0;',
+      '  float dyx=0.0; float dyz=0.0;',
+      '  for(int i=0;i<6;i++){',
+      '    vec4 w=uWaves[i];',
+      '    float amp=w.w*uWaveAmplitude;',
+      '    float steep=uSteep[i].x*uChoppiness;',
+      '    float phase=w.z*dot(w.xy,base.xz)+sqrt(G*w.z)*uTime;',
+      '    float s=sin(phase); float c=cos(phase);',
+      '    p.x-=steep*amp*c*w.x;',
+      '    p.y+=amp*s;',
+      '    p.z-=steep*amp*c*w.y;',
+      '    float jacTerm=steep*amp*w.z*s;',
+      '    dxx+=jacTerm*w.x*w.x;',
+      '    dxz+=jacTerm*w.x*w.y;',
+      '    dzx+=jacTerm*w.y*w.x;',
+      '    dzz+=jacTerm*w.y*w.y;',
+      '    dyx+=amp*w.z*c*w.x;',
+      '    dyz+=amp*w.z*c*w.y;',
+      '  }',
+      '  float j11=1.0+dxx; float j22=1.0+dzz;',
+      '  float jacobian=j11*j22-dxz*dzx;',
+      '  vFoam=smoothstep(uFoamThreshold+0.16,uFoamThreshold-0.08,jacobian);',
+      '  vec3 tx=vec3(j11,dyx,dzx);',
+      '  vec3 tz=vec3(dxz,dyz,j22);',
+      '  vNormal=normalize(cross(tz,tx));',
+      '  vWorldPos=(modelMatrix*vec4(p,1.0)).xyz;',
+      '  vHeight=p.y;',
+      '  gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.0);',
+      '}'
+    ].join('\n');
+
+    const oceanFragment = [
+      'precision highp float;',
+      'uniform float uTime;',
+      'uniform float uFoamIntensity;',
+      'uniform float uWaterClarity;',
+      'uniform float uFogDensity;',
+      'uniform float uSunIntensity;',
+      'uniform float uTransition;',
+      'uniform vec3 uDeepColor;',
+      'uniform vec3 uShallowColor;',
+      'uniform vec3 uSkyColor;',
+      'uniform vec3 uHorizonColor;',
+      'uniform vec3 uFoamColor;',
+      'uniform vec3 uWarmColor;',
+      'uniform vec3 uViewPos;',
+      'varying vec3 vWorldPos;',
+      'varying vec3 vNormal;',
+      'varying float vFoam;',
+      'varying float vHeight;',
+      'float hash21(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }',
+      'float noise21(vec2 p){',
+      '  vec2 i=floor(p); vec2 f=fract(p); f=f*f*(3.0-2.0*f);',
+      '  return mix(mix(hash21(i),hash21(i+vec2(1.,0.)),f.x),',
+      '             mix(hash21(i+vec2(0.,1.)),hash21(i+vec2(1.,1.)),f.x),f.y);',
+      '}',
+      'void main(){',
+      '  vec3 n=normalize(vNormal);',
+      '  vec3 v=normalize(uViewPos-vWorldPos);',
+      '  float nov=max(dot(n,v),0.0);',
+      '  float fresnel=0.02+0.98*pow(1.0-nov,5.0);',
+      '  float heightMix=smoothstep(-0.85,0.95,vHeight);',
+      '  vec3 water=mix(uDeepColor,uShallowColor,heightMix*uWaterClarity);',
+      '  vec3 reflection=mix(uHorizonColor,uSkyColor,nov);',
+      '  vec3 color=mix(water,reflection,fresnel*0.84);',
+      '  vec3 lightDir=normalize(vec3(-0.45,0.72,-0.34));',
+      '  vec3 halfDir=normalize(lightDir+v);',
+      '  float spec=pow(max(dot(n,halfDir),0.0),128.0)*uSunIntensity;',
+      '  color+=mix(vec3(.42,.55,.62),uWarmColor,uTransition)*spec*.62;',
+      '  float foamNoise=.62+.38*noise21(vWorldPos.xz*.34+uTime*.025);',
+      '  color=mix(color,uFoamColor,clamp(vFoam*foamNoise*uFoamIntensity,0.0,.72));',
+      '  float rim=pow(max(0.0,dot(v,normalize(-lightDir+n*.2))),4.0);',
+      '  color+=mix(vec3(.08,.23,.28),uWarmColor*.34,uTransition)*rim*heightMix*.45;',
+      '  float dist=length(vWorldPos-uViewPos);',
+      '  float fog=1.0-exp(-pow(dist*uFogDensity,2.0));',
+      '  vec3 fogColor=mix(uHorizonColor,uWarmColor,uTransition*.35);',
+      '  color=mix(color,fogColor,clamp(fog,0.0,.86));',
+      '  color*=.92+uSunIntensity*.18;',
+      '  gl_FragColor=vec4(color,1.0);',
+      '}'
+    ].join('\n');
+
+    const oceanGeometry = new THREE.PlaneGeometry(
+      110,
+      110,
+      IS_MOBILE ? 96 : 180,
+      IS_MOBILE ? 96 : 180
+    );
+    oceanGeometry.rotateX(-Math.PI / 2);
+
+    const oceanMaterial = new THREE.ShaderMaterial({
+      uniforms: oceanUniforms,
+      vertexShader: oceanVertex,
+      fragmentShader: oceanFragment,
+      side: THREE.DoubleSide,
+      fog: false
+    });
+    const ocean = new THREE.Mesh(oceanGeometry, oceanMaterial);
+    ocean.position.set(0, -1.7, -13);
+    scene.add(ocean);
+
+    function makeGlowTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 256;
+      const context = canvas.getContext('2d');
+      const gradient = context.createRadialGradient(128, 128, 0, 128, 128, 126);
+      gradient.addColorStop(0, 'rgba(244,226,180,.88)');
+      gradient.addColorStop(.08, 'rgba(215,190,132,.48)');
+      gradient.addColorStop(.32, 'rgba(146,164,163,.12)');
+      gradient.addColorStop(1, 'rgba(80,120,145,0)');
+      context.fillStyle = gradient;
+      context.fillRect(0, 0, 256, 256);
+      return new THREE.CanvasTexture(canvas);
+    }
+
+    const horizonGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: makeGlowTexture(),
+      color: 0xc8a860,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      fog: true
+    }));
+    horizonGlow.position.set(15, 2.8, -48);
+    horizonGlow.scale.set(18, 18, 1);
+    scene.add(horizonGlow);
+
+    const threadCount = IS_MOBILE ? 48 : 76;
+    const threads = Array.from({ length: threadCount }, (_, index) => {
+      const angle = rng() * Math.PI * 2;
+      const radius = Math.min(170, innerHeight * .18) * (.35 + Math.pow(rng(), .7) * .65);
+      const targetBand = index / Math.max(1, threadCount - 1);
+      return {
+        angle,
+        radius,
+        curl: (rng() - .5) * 2.4,
+        phase: rng() * Math.PI * 2,
+        weight: .45 + rng() * 1.15,
+        releaseAt: 0,
+        targetX: .18 + targetBand * .72 + (rng() - .5) * .08,
+        targetY: .55 + rng() * .19,
+        glow: .38 + rng() * .62
+      };
+    });
+
+    // 解结编排：外层线先脱、内层后脱；按脱离顺序均匀抽 12 根作为玻璃琴弦
+    const maxThreadRadius = threads.reduce((m, t) => Math.max(m, t.radius), 0);
+    threads.forEach(t => {
+      t.releaseAt = (1 - t.radius / maxThreadRadius) * .85 + rng() * .04;
+      t.pluck = false;
+      t.plucked = false;
+    });
+    const PLUCK_OFFSETS = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24, 26];
+    [...threads].sort((a, b) => a.releaseAt - b.releaseAt).forEach((t, i, arr) => {
+      const step = Math.max(1, Math.floor(arr.length / PLUCK_OFFSETS.length));
+      const slot = Math.floor(i / step);
+      if (i % step === 0 && slot < PLUCK_OFFSETS.length) {
+        t.pluck = true;
+        t.tone = 216 * Math.pow(2, PLUCK_OFFSETS[slot] / 12);
+      }
+    });
+
+    function fingerprintWorld(items) {
+      let hash = 2166136261;
+      for (const item of items) {
+        const values = [item.angle, item.radius, item.curl, item.phase, item.targetX, item.targetY];
+        for (const value of values) {
+          hash ^= Math.round(value * 100000);
+          hash = Math.imul(hash, 16777619);
+        }
+      }
+      return (hash >>> 0).toString(16).padStart(8, '0');
+    }
+    body.dataset.seed = String(SEED);
+    body.dataset.world = fingerprintWorld(threads);
+    body.dataset.quality = IS_MOBILE ? 'mobile' : 'desktop';
+    body.dataset.threadCount = String(threadCount);
+
+    function knotCenter() {
+      return {
+        x: State.width * (IS_MOBILE ? .56 : .64),
+        y: State.height * (IS_MOBILE ? .42 : .47)
+      };
+    }
+
+    function projectedWave(x, time, calm) {
+      const ts = smooth01(calm);
+      const amplitude = lerp(16, 3.6, ts);
+      return (
+        Math.sin(x * .012 + time * .78) * amplitude * .52 +
+        Math.sin(x * .021 - time * .56 + 1.7) * amplitude * .28 +
+        Math.sin(x * .006 + time * .34 + .4) * amplitude * .20
+      );
+    }
+
+    function threadOrigin(item, index, loosen) {
+      const center = knotCenter();
+      const breathing = Math.sin(State.time * (1.65 - loosen * .9) + item.phase) * (4.8 - loosen * 3.4);
+      const r = item.radius * (1 + loosen * 1.2) + breathing;
+      const a = item.angle + Math.sin(State.time * .55 + item.phase) * .16 + item.curl * loosen * .24;
+      return {
+        x: center.x + Math.cos(a * 2.1 + index * .015) * r * .76,
+        y: center.y + Math.sin(a * 1.7 - index * .012) * r * .48
+      };
+    }
+
+    function drawThreadField(relEased) {
+      const width = State.width;
+      const height = State.height;
+      const center = knotCenter();
+      const entryAlpha = smooth01((State.entry - .18) / .72);
+      threadCtx.clearRect(0, 0, width, height);
+      threadCtx.save();
+      threadCtx.globalCompositeOperation = 'screen';
+
+      const burden = 1 - relEased;
+      const activeCompression = State.knotMode === 'active' ? .78 : 1;
+
+      for (let i = 0; i < threads.length; i++) {
+        const item = threads[i];
+        const release = smooth01((relEased - item.releaseAt) / Math.max(.08, 1 - item.releaseAt));
+        const origin = threadOrigin(item, i, relEased);
+        const targetX = item.targetX * width;
+        const targetY = item.targetY * height + projectedWave(targetX, State.time, State.calm);
+        const x = lerp(origin.x, targetX, release);
+        const y = lerp(origin.y, targetY, release);
+        const tensionAlpha = entryAlpha * (1 - release) * (.30 + item.glow * .35) * (pointerHeld ? 1.3 : 1);
+
+        if (tensionAlpha > .002) {
+          const c1x = lerp(center.x, origin.x, .30) + Math.sin(item.phase + State.time) * 24 * burden;
+          const c1y = center.y + item.curl * 23 * activeCompression;
+          const c2x = lerp(center.x, origin.x, .76) - item.curl * 18;
+          const c2y = lerp(center.y, origin.y, .72) + Math.cos(item.phase) * 22 * burden;
+          threadCtx.beginPath();
+          threadCtx.moveTo(center.x, center.y);
+          threadCtx.bezierCurveTo(c1x, c1y, c2x, c2y, origin.x, origin.y);
+          const strain = threadCtx.createLinearGradient(center.x, center.y, origin.x, origin.y);
+          strain.addColorStop(0, 'rgba(255,206,150,' + Math.min(1, tensionAlpha * 1.1).toFixed(3) + ')');
+          strain.addColorStop(.5, 'rgba(196,182,168,' + tensionAlpha.toFixed(3) + ')');
+          strain.addColorStop(1, 'rgba(137,157,169,' + (tensionAlpha * .85).toFixed(3) + ')');
+          threadCtx.strokeStyle = strain;
+          threadCtx.lineWidth = item.weight;
+          threadCtx.stroke();
+        }
+
+        if (release > .01) {
+          const waveOffset = projectedWave(x - 12, State.time - .12, State.calm);
+          const trailAlpha = entryAlpha * release * (.07 + item.glow * .13);
+          threadCtx.beginPath();
+          threadCtx.moveTo(lerp(origin.x, targetX - 18, release), lerp(origin.y, targetY + waveOffset * .3, release));
+          threadCtx.quadraticCurveTo(x - 9, y + waveOffset * .20, x, y);
+          threadCtx.strokeStyle = 'rgba(145,190,199,' + trailAlpha.toFixed(3) + ')';
+          threadCtx.lineWidth = .5 + item.weight * .55;
+          threadCtx.stroke();
+
+          const moteRadius = (.65 + item.glow * 1.45) * (0.78 + relEased * .45);
+          const moteGradient = threadCtx.createRadialGradient(x, y, 0, x, y, moteRadius * 4.2);
+          moteGradient.addColorStop(0, 'rgba(232,226,199,' + (trailAlpha * 2.2).toFixed(3) + ')');
+          moteGradient.addColorStop(.22, 'rgba(160,199,204,' + (trailAlpha * 1.4).toFixed(3) + ')');
+          moteGradient.addColorStop(1, 'rgba(92,146,166,0)');
+          threadCtx.fillStyle = moteGradient;
+          threadCtx.beginPath();
+          threadCtx.arc(x, y, moteRadius * 4.2, 0, Math.PI * 2);
+          threadCtx.fill();
+        }
+      }
+
+      if (burden > .015) {
+        // 闷烧暖核：结是冷海世界里唯一的暖光，随呼吸脉动
+        const emberPulse = (.75 + Math.sin(State.time * 3.1) * .25) * (pointerHeld ? 1.4 : 1);
+        const emberRadius = (18 + 26 * burden) * activeCompression * 1.5;
+        const ember = threadCtx.createRadialGradient(center.x, center.y, 0, center.x, center.y, emberRadius);
+        ember.addColorStop(0, 'rgba(255,190,130,' + (.30 * burden * entryAlpha * emberPulse).toFixed(3) + ')');
+        ember.addColorStop(.4, 'rgba(220,140,90,' + (.14 * burden * entryAlpha * emberPulse).toFixed(3) + ')');
+        ember.addColorStop(1, 'rgba(120,70,50,0)');
+        threadCtx.fillStyle = ember;
+        threadCtx.beginPath();
+        threadCtx.arc(center.x, center.y, emberRadius, 0, Math.PI * 2);
+        threadCtx.fill();
+      }
+
+      if (burden > .015) {
+        const coreRadius = (18 + 26 * burden) * activeCompression;
+        const core = threadCtx.createRadialGradient(
+          center.x - coreRadius * .18,
+          center.y - coreRadius * .24,
+          0,
+          center.x,
+          center.y,
+          coreRadius * 1.8
+        );
+        core.addColorStop(0, 'rgba(103,118,128,' + (.28 * burden * entryAlpha).toFixed(3) + ')');
+        core.addColorStop(.42, 'rgba(38,52,64,' + (.52 * burden * entryAlpha).toFixed(3) + ')');
+        core.addColorStop(1, 'rgba(8,18,29,0)');
+        threadCtx.fillStyle = core;
+        threadCtx.beginPath();
+        threadCtx.arc(center.x, center.y, coreRadius * 1.8, 0, Math.PI * 2);
+        threadCtx.fill();
+      }
+
+      if (State.handoffReceived && State.receivePulse < 1.25) {
+        const pulse = smooth01(State.receivePulse / 1.25);
+        const radius = 24 + pulse * Math.min(width, height) * .18;
+        threadCtx.beginPath();
+        threadCtx.arc(center.x, center.y, radius, 0, Math.PI * 2);
+        threadCtx.strokeStyle = 'rgba(198,209,199,' + Math.max(0, (1 - pulse) * .32).toFixed(3) + ')';
+        threadCtx.lineWidth = 1;
+        threadCtx.stroke();
+      }
+
+      // 未命中提示：结做一次柔和脉冲，无惩罚
+      if (State.missPulse > 0) {
+        const mp = smooth01(1 - State.missPulse);
+        threadCtx.beginPath();
+        threadCtx.arc(center.x, center.y, 30 + mp * 90, 0, Math.PI * 2);
+        threadCtx.strokeStyle = 'rgba(230,210,180,' + (State.missPulse * .3).toFixed(3) + ')';
+        threadCtx.lineWidth = 1;
+        threadCtx.stroke();
+      }
+
+      // 潮痕：解结完成后沿水线浮现的发光曲线，随浪起伏、缓慢呼吸、两端淡出
+      const tideTrace = smooth01((relEased - .55) / .35);
+      if (tideTrace > .01) {
+        const baseY = height * .53;
+        const traceBreathe = .8 + Math.sin(State.time * .63) * .2;
+        const traceAlpha = tideTrace * .38 * traceBreathe * (State.phase === 'respond' ? .66 : 1);
+        const traceY = (x) => baseY + projectedWave(x, State.time, State.calm) * 1.2 + Math.sin(x * .043 + State.time * 1.1) * 1.6;
+        const edgeFade = threadCtx.createLinearGradient(0, 0, width, 0);
+        edgeFade.addColorStop(0, 'rgba(240,235,210,0)');
+        edgeFade.addColorStop(.18, 'rgba(240,235,210,' + traceAlpha.toFixed(3) + ')');
+        edgeFade.addColorStop(.82, 'rgba(240,235,210,' + traceAlpha.toFixed(3) + ')');
+        edgeFade.addColorStop(1, 'rgba(240,235,210,0)');
+        const edgeFadeWide = threadCtx.createLinearGradient(0, 0, width, 0);
+        edgeFadeWide.addColorStop(0, 'rgba(200,225,220,0)');
+        edgeFadeWide.addColorStop(.18, 'rgba(200,225,220,' + (traceAlpha * .55).toFixed(3) + ')');
+        edgeFadeWide.addColorStop(.82, 'rgba(200,225,220,' + (traceAlpha * .55).toFixed(3) + ')');
+        edgeFadeWide.addColorStop(1, 'rgba(200,225,220,0)');
+        threadCtx.beginPath();
+        for (let x = -20; x <= width + 20; x += 14) {
+          const y = traceY(x);
+          if (x === -20) threadCtx.moveTo(x, y); else threadCtx.lineTo(x, y);
+        }
+        threadCtx.strokeStyle = edgeFadeWide;
+        threadCtx.lineWidth = 5;
+        threadCtx.stroke();
+        threadCtx.strokeStyle = edgeFade;
+        threadCtx.lineWidth = 1.4;
+        threadCtx.stroke();
+        for (let k = 0; k < 6; k++) {
+          const mx = ((State.time * (8 + k * 3) + k * 197) % (width + 80)) - 40;
+          const my = traceY(mx);
+          const moteGlow = threadCtx.createRadialGradient(mx, my, 0, mx, my, 6);
+          moteGlow.addColorStop(0, 'rgba(245,238,214,' + (traceAlpha * .9).toFixed(3) + ')');
+          moteGlow.addColorStop(1, 'rgba(245,238,214,0)');
+          threadCtx.fillStyle = moteGlow;
+          threadCtx.beginPath();
+          threadCtx.arc(mx, my, 6, 0, Math.PI * 2);
+          threadCtx.fill();
+        }
+      }
+
+      threadCtx.restore();
+    }
+
+    let audioCtx = null;
+    let masterGain = null;
+    let tideLayer = null;
+    let audioActivated = false;
+
+    function createPinkNoiseBuffer() {
+      const size = audioCtx.sampleRate * 2;
+      const buffer = audioCtx.createBuffer(1, size, audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+      let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+      for (let i = 0; i < size; i++) {
+        const white = rng() * 2 - 1;
+        b0 = .99886 * b0 + white * .0555179;
+        b1 = .99332 * b1 + white * .0750759;
+        b2 = .96900 * b2 + white * .1538520;
+        b3 = .86650 * b3 + white * .3104856;
+        b4 = .55000 * b4 + white * .5329522;
+        b5 = -.7616 * b5 - white * .0168980;
+        data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * .5362) * .11;
+        b6 = white * .115926;
+      }
+      return buffer;
+    }
+
+    function initAudio() {
+      if (audioCtx) return;
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      masterGain = audioCtx.createGain();
+      masterGain.gain.value = 0;
+      masterGain.connect(audioCtx.destination);
+
+      const source = audioCtx.createBufferSource();
+      source.buffer = createPinkNoiseBuffer();
+      source.loop = true;
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = 780;
+      filter.Q.value = .48;
+      const tideGain = audioCtx.createGain();
+      tideGain.gain.value = .045;
+      const breath = audioCtx.createOscillator();
+      breath.type = 'sine';
+      breath.frequency.value = .085;
+      const breathDepth = audioCtx.createGain();
+      breathDepth.gain.value = .012;
+      breath.connect(breathDepth);
+      breathDepth.connect(tideGain.gain);
+      source.connect(filter);
+      filter.connect(tideGain);
+      tideGain.connect(masterGain);
+      source.start();
+      breath.start();
+      tideLayer = { source, filter, gain: tideGain, breath, breathDepth };
+      body.dataset.audio = audioCtx.state;
+    }
+
+    async function activateAudio() {
+      if (!audioCtx) initAudio();
+      if (audioCtx.state === 'suspended') await audioCtx.resume();
+      body.dataset.audio = audioCtx.state;
+      if (audioActivated) return;
+      audioActivated = true;
+      masterGain.gain.cancelScheduledValues(audioCtx.currentTime);
+      masterGain.gain.setValueAtTime(masterGain.gain.value, audioCtx.currentTime);
+      masterGain.gain.linearRampToValueAtTime(.22, audioCtx.currentTime + 1.8);
+    }
+
+    function updateAudio(ts) {
+      if (!audioCtx || !tideLayer) return;
+      const now = audioCtx.currentTime;
+      tideLayer.gain.gain.setTargetAtTime(.052 - .018 * ts, now, .18);
+      tideLayer.filter.frequency.setTargetAtTime(820 - 470 * ts, now, .22);
+      tideLayer.breathDepth.gain.setTargetAtTime(.012 - .005 * ts, now, .28);
+    }
+
+    function strikeResponseTone() {
+      if (!audioCtx || !masterGain || State.responseSoundPlayed) return;
+      State.responseSoundPlayed = true;
+      const now = audioCtx.currentTime;
+      const low = audioCtx.createOscillator();
+      const high = audioCtx.createOscillator();
+      const lowGain = audioCtx.createGain();
+      const highGain = audioCtx.createGain();
+      low.type = 'sine';
+      high.type = 'sine';
+      low.frequency.value = 216;
+      high.frequency.value = 432;
+      lowGain.gain.setValueAtTime(.0001, now);
+      highGain.gain.setValueAtTime(.0001, now);
+      lowGain.gain.linearRampToValueAtTime(.12, now + .08);
+      highGain.gain.linearRampToValueAtTime(.07, now + .04);
+      lowGain.gain.exponentialRampToValueAtTime(.0001, now + 7.4);
+      highGain.gain.exponentialRampToValueAtTime(.0001, now + 5.8);
+      low.connect(lowGain);
+      high.connect(highGain);
+      lowGain.connect(masterGain);
+      highGain.connect(masterGain);
+      low.start(now);
+      high.start(now);
+      low.stop(now + 7.5);
+      high.stop(now + 5.9);
+    }
+
+    // 玻璃琴弦：被选中的线脱离时，敲一声带不和谐泛音的玻璃音
+    function strikeGlassPluck(freq) {
+      if (!audioCtx || !masterGain || audioCtx.state !== 'running') return;
+      const now = audioCtx.currentTime;
+      const partials = [[1, .05], [2.76, .022], [5.4, .010]];
+      for (const [ratio, level] of partials) {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq * ratio;
+        gain.gain.setValueAtTime(.0001, now);
+        gain.gain.linearRampToValueAtTime(level, now + .005);
+        gain.gain.exponentialRampToValueAtTime(.0001, now + 2.5);
+        osc.connect(gain);
+        gain.connect(masterGain);
+        osc.start(now);
+        osc.stop(now + 2.6);
+      }
+    }
+
+    let pointerHeld = false;
+    let handoffCommitted = false;
+
+    function beginHandoff(event) {
+      if (handoffCommitted || State.phase !== 'recognize') return;
+      const cx = event.clientX;
+      const cy = event.clientY;
+      if (typeof cx === 'number' && typeof cy === 'number') {
+        // 命中判定：必须按在结上（1.6 倍宽容椭圆区），未命中仅提示、不惩罚
+        const center = knotCenter();
+        const hitRadius = Math.min(170, State.height * .18);
+        const nx = (cx - center.x) / (hitRadius * .76 * 1.6);
+        const ny = (cy - center.y) / (hitRadius * .48 * 1.6);
+        if (nx * nx + ny * ny > 1) {
+          State.missPulse = 1;
+          return;
+        }
+      }
+      pointerHeld = true;
+      State.knotMode = 'active';
+      body.dataset.pressed = 'true';
+      revealCursor(event);
+      if (navigator.vibrate) navigator.vibrate(15);
+      activateAudio().catch(() => {
+        body.dataset.audio = 'unavailable';
+      });
+    }
+
+    function commitHandoff() {
+      if (!pointerHeld || handoffCommitted) return;
+      pointerHeld = false;
+      handoffCommitted = true;
+      body.dataset.pressed = 'false';
+      State.handoffReceived = true;
+      State.interactCount = 1;
+      State.knotMode = 'active';
+      State.calmTarget = 1;
+      transition('handoff');
+    }
+
+    function cancelHandoff() {
+      if (handoffCommitted) return;
+      pointerHeld = false;
+      State.knotMode = 'idle';
+      body.dataset.pressed = 'false';
+    }
+
+    addEventListener('pointerdown', beginHandoff, { passive: true });
+    addEventListener('pointerup', commitHandoff, { passive: true });
+    addEventListener('pointercancel', cancelHandoff, { passive: true });
+
+    // ==========================================
+    // 潮痕卡：终态长按，把今晚的潮痕带走
+    // ==========================================
+    const keepsakeOverlay = document.getElementById('keepsake-overlay');
+    const keepsakeImg = document.getElementById('keepsake-img');
+    let keepsakeTimer = 0;
+    let keepsakeStart = null;
+
+    function clearKeepsakeTimer() {
+      keepsakeStart = null;
+      clearTimeout(keepsakeTimer);
+    }
+
+    addEventListener('pointerdown', (event) => {
+      if (State.phase !== 'respond') return;
+      keepsakeStart = { x: event.clientX, y: event.clientY };
+      clearTimeout(keepsakeTimer);
+      keepsakeTimer = setTimeout(showKeepsake, 600);
+    }, { passive: true });
+    addEventListener('pointerup', clearKeepsakeTimer, { passive: true });
+    addEventListener('pointercancel', clearKeepsakeTimer, { passive: true });
+    addEventListener('pointermove', (event) => {
+      if (!keepsakeStart) return;
+      if (Math.hypot(event.clientX - keepsakeStart.x, event.clientY - keepsakeStart.y) > 10) {
+        clearKeepsakeTimer();
+      }
+    }, { passive: true });
+
+    // 只有点按深色背景才关闭；按在图片上不拦截，留给系统长按保存菜单
+    keepsakeOverlay.addEventListener('pointerdown', (event) => {
+      event.stopPropagation();
+      if (event.target === keepsakeOverlay) {
+        keepsakeOverlay.classList.remove('show');
+      }
+    });
+
+    function showKeepsake() {
+      keepsakeStart = null;
+      keepsakeImg.src = composeKeepsake().toDataURL('image/png');
+      keepsakeOverlay.classList.add('show');
+    }
+
+    // cover 适配：两画布同宽高比，同一变换保证潮痕与海面严格对齐
+    function coverDraw(ctx, src, w, h, mode) {
+      const scale = Math.max(w / src.width, h / src.height);
+      const dw = src.width * scale;
+      const dh = src.height * scale;
+      ctx.save();
+      if (mode) ctx.globalCompositeOperation = mode;
+      ctx.drawImage(src, (w - dw) / 2, (h - dh) / 2, dw, dh);
+      ctx.restore();
+    }
+
+    function drawSpacedText(ctx, text, cx, y, spacing) {
+      const chars = [...text];
+      const widths = chars.map(ch => ctx.measureText(ch).width);
+      const total = widths.reduce((a, b) => a + b, 0) + spacing * (chars.length - 1);
+      let x = cx - total / 2;
+      ctx.textAlign = 'left';
+      chars.forEach((ch, i) => {
+        ctx.fillText(ch, x, y);
+        x += widths[i] + spacing;
+      });
+    }
+
+    function composeKeepsake() {
+      const cardW = 1080;
+      const cardH = 1350;
+      const card = document.createElement('canvas');
+      card.width = cardW;
+      card.height = cardH;
+      const ctx = card.getContext('2d');
+
+      // 1) 手绘底色：复刻 body CSS 渐变（linear 158deg + radial 74%/30%）
+      const angle = 158 * Math.PI / 180;
+      const vx = Math.sin(angle);
+      const vy = -Math.cos(angle);
+      const half = (Math.abs(vx * cardW) + Math.abs(vy * cardH)) / 2;
+      const lin = ctx.createLinearGradient(
+        cardW / 2 - vx * half, cardH / 2 - vy * half,
+        cardW / 2 + vx * half, cardH / 2 + vy * half
+      );
+      lin.addColorStop(0, '#182a42');
+      lin.addColorStop(.48, '#0d1d33');
+      lin.addColorStop(1, '#0a1728');
+      ctx.fillStyle = lin;
+      ctx.fillRect(0, 0, cardW, cardH);
+      const rad = ctx.createRadialGradient(cardW * .74, cardH * .30, 0, cardW * .74, cardH * .30, Math.min(cardW, cardH) * .29);
+      rad.addColorStop(0, 'rgba(84,112,140,.20)');
+      rad.addColorStop(1, 'rgba(84,112,140,0)');
+      ctx.fillStyle = rad;
+      ctx.fillRect(0, 0, cardW, cardH);
+
+      // 2) WebGL 海面：同帧 render 后立即取用（preserveDrawingBuffer=false 的唯一正确姿势）
+      renderer.render(scene, camera);
+      coverDraw(ctx, renderer.domElement, cardW, cardH);
+
+      // 3) threads 层（潮痕与微光），screen 混合与页面一致
+      coverDraw(ctx, threadCanvas, cardW, cardH, 'screen');
+
+      // 4) 大气暖光（对应 #atmosphere 的 calm 态）
+      const calmGlow = smooth01(State.calm);
+      if (calmGlow > .01) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'screen';
+        const warm = ctx.createRadialGradient(cardW * .78, cardH * .38, 0, cardW * .78, cardH * .38, cardH * .53);
+        warm.addColorStop(0, 'rgba(200,168,96,' + (calmGlow * .20).toFixed(3) + ')');
+        warm.addColorStop(.21, 'rgba(128,154,170,' + (calmGlow * .08).toFixed(3) + ')');
+        warm.addColorStop(1, 'rgba(128,154,170,0)');
+        ctx.fillStyle = warm;
+        ctx.fillRect(0, 0, cardW, cardH);
+        ctx.restore();
+      }
+
+      // 5) 暗角
+      const vig = ctx.createRadialGradient(cardW * .62, cardH * .46, cardH * .15, cardW * .62, cardH * .46, cardH * .95);
+      vig.addColorStop(0, 'rgba(3,9,16,0)');
+      vig.addColorStop(.55, 'rgba(5,12,22,.10)');
+      vig.addColorStop(1, 'rgba(3,9,16,.58)');
+      ctx.fillStyle = vig;
+      ctx.fillRect(0, 0, cardW, cardH);
+
+      // 6) 文案与日期戳
+      const now = new Date();
+      const dateStr = now.getFullYear() + '.' + String(now.getMonth() + 1).padStart(2, '0') + '.' + String(now.getDate()).padStart(2, '0');
+      ctx.shadowColor = 'rgba(188,214,226,.15)';
+      ctx.shadowBlur = 24;
+      ctx.font = '200 54px "Songti SC", "STSong", "Noto Serif CJK SC", serif';
+      ctx.fillStyle = 'rgba(235,229,210,.93)';
+      drawSpacedText(ctx, '今晚，不必由你保管。', cardW / 2, cardH * .74, 14);
+      ctx.shadowBlur = 0;
+      ctx.font = '200 28px "Songti SC", "STSong", "Noto Serif CJK SC", serif';
+      ctx.fillStyle = 'rgba(205,216,220,.55)';
+      drawSpacedText(ctx, '海会记得它来过。', cardW / 2, cardH * .74 + 64, 9);
+      ctx.font = '20px ui-monospace, monospace';
+      ctx.fillStyle = 'rgba(200,168,96,.62)';
+      drawSpacedText(ctx, dateStr + ' · 潮汐保管处', cardW / 2, cardH * .9, 5);
+
+      return card;
+    }
+
+    function updateState(dt) {
+      State.time += dt;
+      State.entry += (State.entryTarget - State.entry) * Math.min(1, dt * (REDUCED_MOTION ? 4.0 : .92));
+      State.calm += (State.calmTarget - State.calm) * Math.min(1, dt * CALM_LERP_SPEED);
+
+      if (State.handoffReceived) {
+        State.receivePulse = Math.min(1.25, State.receivePulse + dt * 1.15);
+        // 解结独立时钟：7s 渐慢节律（reduced-motion 压到 2s），与 calm 解耦
+        if (State.releaseT < 1) {
+          State.releaseT = Math.min(1, State.releaseT + dt / (REDUCED_MOTION ? 2 : 7));
+        }
+        State.relEased = 1 - (1 - State.releaseT) * (1 - State.releaseT);
+        if (State.relEased > State.lastRelEased) {
+          for (const t of threads) {
+            if (t.pluck && !t.plucked && t.releaseAt > State.lastRelEased && t.releaseAt <= State.relEased) {
+              t.plucked = true;
+              strikeGlassPluck(t.tone);
+            }
+          }
+          State.lastRelEased = State.relEased;
+        }
+        if (State.receivePulse > .45 && State.calm > .08 && State.phase === 'handoff') {
+          State.knotMode = 'react';
+          transition('release');
+        }
+      }
+      if (State.missPulse > 0) {
+        State.missPulse = Math.max(0, State.missPulse - dt * 1.2);
+      }
+
+      const settledFraction = smooth01((State.calm - .84) / .16);
+      if (
+        State.phase === 'release' &&
+        State.releaseT > .92 &&
+        State.calm > .92 &&
+        settledFraction > .5
+      ) {
+        transition('respond');
+      }
+
+      body.dataset.calm = State.calm.toFixed(3);
+      body.dataset.history = State.history.join('>');
+      body.dataset.entry = State.entry > .985 ? 'ready' : 'arriving';
+      body.style.setProperty('--entry', State.entry.toFixed(4));
+      body.style.setProperty('--calm', smooth01(State.calm).toFixed(4));
+      statusEl.value = State.phase + ':' + State.calm.toFixed(3);
+    }
+
+    function applyCalmState() {
+      const c = State.calm;
+      const ts = smooth01(c);
+      const uniforms = oceanMaterial.uniforms;
+
+      uniforms.uWaveAmplitude.value = lerp(.82, .18, ts);
+      uniforms.uChoppiness.value = lerp(.76, .10, ts);
+      uniforms.uFoamThreshold.value = lerp(.10, .72, ts);
+      uniforms.uFoamIntensity.value = lerp(.58, .07, ts);
+      uniforms.uWaterClarity.value = lerp(.36, .92, ts);
+      uniforms.uFogDensity.value = lerp(.0014, .00045, ts);
+      uniforms.uSunIntensity.value = lerp(.42, .96, ts);
+      uniforms.uTransition.value = ts;
+      uniforms.uDeepColor.value.setRGB(
+        lerp(.062, .072, ts),
+        lerp(.132, .176, ts),
+        lerp(.192, .255, ts)
+      );
+      uniforms.uShallowColor.value.setRGB(
+        lerp(.135, .25, ts),
+        lerp(.285, .48, ts),
+        lerp(.395, .58, ts)
+      );
+      uniforms.uSkyColor.value.setRGB(
+        lerp(.082, .18, ts),
+        lerp(.158, .29, ts),
+        lerp(.24, .36, ts)
+      );
+      uniforms.uHorizonColor.value.setRGB(
+        lerp(.22, .43, ts),
+        lerp(.31, .48, ts),
+        lerp(.36, .47, ts)
+      );
+
+      scene.fog.density = lerp(.0014, .00045, ts);
+      horizonGlow.material.opacity = Math.max(0, (ts - .56) / .44) * .85;
+      horizonGlow.scale.setScalar(lerp(18, 32, ts));
+      renderer.toneMappingExposure = lerp(1.04, 1.22, ts);
+      updateAudio(ts);
+    }
+
+    function updateEntryCamera(dt) {
+      const ease = smooth01(State.entry);
+      const targetX = lerp(-3.6, cameraBase.x, ease);
+      const targetY = lerp(10.8, cameraBase.y, ease);
+      const targetZ = lerp(22, cameraBase.z, ease);
+      const targetFov = lerp(68, cameraBase.fov, ease);
+      camera.position.x += (targetX - camera.position.x) * Math.min(1, dt * 2.2);
+      camera.position.y += (targetY - camera.position.y) * Math.min(1, dt * 2.2);
+      camera.position.z += (targetZ - camera.position.z) * Math.min(1, dt * 2.2);
+      camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 2.0);
+      camera.updateProjectionMatrix();
+      camera.lookAt(0, -.55, -7);
+      oceanMaterial.uniforms.uViewPos.value.copy(camera.position);
+    }
+
+    function resize() {
+      State.width = innerWidth;
+      State.height = innerHeight;
+      State.dpr = Math.min(devicePixelRatio || 1, IS_MOBILE ? 1.35 : 1.8);
+      renderer.setSize(State.width, State.height, false);
+      camera.aspect = State.width / State.height;
+      camera.updateProjectionMatrix();
+
+      threadCanvas.width = Math.round(State.width * State.dpr);
+      threadCanvas.height = Math.round(State.height * State.dpr);
+      threadCanvas.style.width = State.width + 'px';
+      threadCanvas.style.height = State.height + 'px';
+      threadCtx.setTransform(State.dpr, 0, 0, State.dpr, 0, 0);
+    }
+
+    addEventListener('resize', resize, { passive: true });
+    resize();
+
+    let lastFrame = performance.now();
+    function frame(now) {
+      const dt = Math.min((now - lastFrame) / 1000, 0.033);
+      lastFrame = now;
+      updateState(dt);
+      applyCalmState();
+      updateEntryCamera(dt);
+      updateCursor();
+      oceanMaterial.uniforms.uTime.value = State.time * lerp(1, .46, smooth01(State.calm));
+      drawThreadField(State.relEased);
+      renderer.render(scene, camera);
+      requestAnimationFrame(frame);
+    }
+
+    requestAnimationFrame(frame);
+  </script>
+</body>
+</html>
