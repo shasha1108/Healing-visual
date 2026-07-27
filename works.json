@@ -20,7 +20,6 @@
       "layered-mountains"
     ],
     "canvas_2d": [
-      "tide-keeping-station",
       "aquarium-2003",
       "first-light",
       "tree-remembers-wind",
@@ -175,6 +174,46 @@
     ]
   },
   "works": [
+    {
+      "slug": "tide-keeping-station",
+      "title_en": "Tide Keeping Station",
+      "title_zh": "潮汐保管处",
+      "tagline": "把缠成一团的事交给潮汐，它会替你拆开、带走，并留下回应。",
+      "tech": [
+        "Three.js",
+        "Canvas 2D",
+        "WebGL",
+        "Web Audio API"
+      ],
+      "render": "WebGL (Three.js)",
+      "has_audio": true,
+      "has_touch": true,
+      "particle_count": "N/A",
+      "dependencies": 1,
+      "healing_domain": "emotional_release",
+      "keywords": [
+        "canvas 2d",
+        "three.js",
+        "webgl",
+        "web audio api",
+        "touch interaction",
+        "glsl shader"
+      ],
+      "use_cases": [
+        "canvas 2d",
+        "three.js",
+        "webgl",
+        "web audio api",
+        "touch interaction",
+        "glsl shader"
+      ],
+      "files": [
+        "tide-keeping-station.html",
+        "tide-keeping-station.md",
+        "tide-keeping-station_1.gif"
+      ],
+      "date": "2026-07-27"
+    },
     {
       "slug": "aquarium-2003",
       "title_en": "Aquarium 2003",
@@ -1123,46 +1162,6 @@
         "layered-mountains.jpg"
       ],
       "date": "2026-06-11"
-    },
-    {
-      "slug": "tide-keeping-station",
-      "title_en": "Tide Keeping Station",
-      "title_zh": "潮汐保管处",
-      "tagline": "把缠成一团的事交给潮汐，它会替你拆开、带走，并留下回应。",
-      "tech": [
-        "Three.js",
-        "Canvas 2D",
-        "WebGL",
-        "Web Audio API"
-      ],
-      "render": "WebGL (Three.js)",
-      "has_audio": true,
-      "has_touch": true,
-      "particle_count": "N/A",
-      "dependencies": 1,
-      "healing_domain": "emotional_release",
-      "keywords": [
-        "canvas 2d",
-        "three.js",
-        "webgl",
-        "web audio api",
-        "touch interaction",
-        "glsl shader"
-      ],
-      "use_cases": [
-        "canvas 2d",
-        "three.js",
-        "webgl",
-        "web audio api",
-        "touch interaction",
-        "glsl shader"
-      ],
-      "files": [
-        "tide-keeping-station.html",
-        "tide-keeping-station.md",
-        "tide-keeping-station_1.gif"
-      ],
-      "date": "2026-07-27"
     }
   ]
 }
