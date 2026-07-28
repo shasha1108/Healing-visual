@@ -1,4 +1,4 @@
-# First Light · 第一束光 · First Light
+# 第一束光 · First Light
 
 > **Tech Keywords:** p5.js, canvas 2d, web audio api, touch interaction, localstorage persistence
 

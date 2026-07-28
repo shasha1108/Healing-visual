@@ -181,7 +181,7 @@
     {
       "slug": "the-old-signal",
       "title_en": "The Old Signal",
-      "title_zh": "旧信号 · The Old Signal",
+      "title_zh": "旧信号",
       "tagline": "一台信号不好的旧电视，红青两个色版错开着呼吸；你每碰它一次，它就调准一点——直到屏幕里那个旧日的自己，回头看你一眼。",
       "tech": [
         "p5.js",
@@ -301,7 +301,7 @@
     {
       "slug": "first-light",
       "title_en": "First Light",
-      "title_zh": "第一束光 · First Light",
+      "title_zh": "第一束光",
       "tagline": "一颗黑色像素种子，在你的温度里长出第一束光。",
       "tech": [
         "p5.js",

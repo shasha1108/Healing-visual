@@ -155,10 +155,10 @@ open inkmeditation/inkmeditation.html
 <details open>
 <summary><b>📦 All Works</b> &ensp;<sub>34 works · newest first</sub></summary>
 
-01. 🎨 [旧信号 · The Old Signal / The Old Signal](https://shasha1108.github.io/healing-visual-lab/the-old-signal/the-old-signal.html) — 一台信号不好的旧电视，红青两个色版错开着呼吸；你每碰它一次，它就调准一点——直到屏幕里那个旧日的自己，回头看你一眼。
+01. 🎨 [旧信号 / The Old Signal](https://shasha1108.github.io/healing-visual-lab/the-old-signal/the-old-signal.html) — 一台信号不好的旧电视，红青两个色版错开着呼吸；你每碰它一次，它就调准一点——直到屏幕里那个旧日的自己，回头看你一眼。
 02. 🌀 [潮汐保管处 / Tide Keeping Station](https://shasha1108.github.io/healing-visual-lab/tide-keeping-station/tide-keeping-station.html) — 把缠成一团的事交给潮汐，它会替你拆开、带走，并留下回应。
 03. 🎨 [2003 水族馆 / Aquarium 2003](https://shasha1108.github.io/healing-visual-lab/aquarium-2003/aquarium-2003.html) — 你小时候盯过的那个屏保活了——缸里的鱼记得你
-04. 🎨 [第一束光 · First Light / First Light](https://shasha1108.github.io/healing-visual-lab/first-light/first-light.html) — 一颗黑色像素种子，在你的温度里长出第一束光。
+04. 🎨 [第一束光 / First Light](https://shasha1108.github.io/healing-visual-lab/first-light/first-light.html) — 一颗黑色像素种子，在你的温度里长出第一束光。
 05. 🎨 [记得风的树 / The Tree That Remembers Wind](https://shasha1108.github.io/healing-visual-lab/tree-remembers-wind/tree-remembers-wind.html) — 释放与辽阔 —— 一座悬浮小岛上，像素树把每一次拂过树冠的手势变成一阵沿枝传播的风。
 06. 🎨 [雾中候鸟灯塔 / Migratory Bird Lighthouse](https://shasha1108.github.io/healing-visual-lab/migratory-bird-lighthouse/migratory-bird-lighthouse.html) — 光落处，漂泊暂歇
 07. 🎨 [下班回家了，脑子却还在加班 / Overwork](https://shasha1108.github.io/healing-visual-lab/overwork/overwork.html) — 把下班后仍在脑内重播的短语交出去，让语言松解成微光并自然沉底。
@@ -222,13 +222,13 @@ open inkmeditation/inkmeditation.html
 | 能力 | 作品数 | 代表作品 |
 |------|--------|----------|
 | Three.js / WebGL | 11 | 潮汐保管处、宇宙时钟、释·茧 |
-| Canvas 2D / p5.js | 25 | 旧信号 · The Old Signal、2003 水族馆、第一束光 · First Light |
+| Canvas 2D / p5.js | 25 | 旧信号、2003 水族馆、第一束光 |
 | WebGL / GLSL 着色器 | 11 | 潮汐保管处、宇宙时钟、释·茧 |
-| Web Audio API | 24 | 旧信号 · The Old Signal、潮汐保管处、2003 水族馆 |
+| Web Audio API | 24 | 旧信号、潮汐保管处、2003 水族馆 |
 | CSS 3D / GSAP | 2 | 无声的翻译官、宇宙回响 V78 |
 | 粒子系统（10K+） | 26 | 记得风的树、雾中候鸟灯塔、下班回家了，脑子却还在加班 |
 | 流体模拟 | 2 | 息流 · 幻镜、墨池心境 |
-| 触觉交互 | 26 | 旧信号 · The Old Signal、潮汐保管处、2003 水族馆 |
+| 触觉交互 | 26 | 旧信号、潮汐保管处、2003 水族馆 |
 
 <!-- TECH_MATRIX_END -->
 
