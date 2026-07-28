@@ -179,6 +179,44 @@
   },
   "works": [
     {
+      "slug": "the-old-signal",
+      "title_en": "The Old Signal",
+      "title_zh": "旧信号 · The Old Signal",
+      "tagline": "一台信号不好的旧电视，红青两个色版错开着呼吸；你每碰它一次，它就调准一点——直到屏幕里那个旧日的自己，回头看你一眼。",
+      "tech": [
+        "p5.js",
+        "Canvas 2D",
+        "Web Audio API",
+        "localStorage"
+      ],
+      "render": "Canvas2D (p5.js)",
+      "has_audio": true,
+      "has_touch": true,
+      "particle_count": "N/A",
+      "dependencies": 1,
+      "healing_domain": "existential",
+      "keywords": [
+        "p5.js",
+        "canvas 2d",
+        "web audio api",
+        "touch interaction",
+        "localstorage persistence"
+      ],
+      "use_cases": [
+        "p5.js",
+        "canvas 2d",
+        "web audio api",
+        "touch interaction",
+        "localstorage persistence"
+      ],
+      "files": [
+        "the-old-signal.html",
+        "the-old-signal.md",
+        "the-old-signal_1.gif"
+      ],
+      "date": "2026-07-28"
+    },
+    {
       "slug": "tide-keeping-station",
       "title_en": "Tide Keeping Station",
       "title_zh": "潮汐保管处",
@@ -1166,44 +1204,6 @@
         "layered-mountains.jpg"
       ],
       "date": "2026-06-11"
-    },
-    {
-      "slug": "the-old-signal",
-      "title_en": "The Old Signal",
-      "title_zh": "旧信号 · The Old Signal",
-      "tagline": "一台信号不好的旧电视，红青两个色版错开着呼吸；你每碰它一次，它就调准一点——直到屏幕里那个旧日的自己，回头看你一眼。",
-      "tech": [
-        "p5.js",
-        "Canvas 2D",
-        "Web Audio API",
-        "localStorage"
-      ],
-      "render": "Canvas2D (p5.js)",
-      "has_audio": true,
-      "has_touch": true,
-      "particle_count": "N/A",
-      "dependencies": 1,
-      "healing_domain": "existential",
-      "keywords": [
-        "p5.js",
-        "canvas 2d",
-        "web audio api",
-        "touch interaction",
-        "localstorage persistence"
-      ],
-      "use_cases": [
-        "p5.js",
-        "canvas 2d",
-        "web audio api",
-        "touch interaction",
-        "localstorage persistence"
-      ],
-      "files": [
-        "the-old-signal.html",
-        "the-old-signal.md",
-        "the-old-signal_1.gif"
-      ],
-      "date": "2026-07-28"
     }
   ]
 }
