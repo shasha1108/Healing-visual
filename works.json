@@ -2,8 +2,8 @@
   "repo": "shasha1108/healing-visual-lab",
   "url": "https://github.com/shasha1108/healing-visual-lab",
   "pages": "https://shasha1108.github.io/healing-visual-lab/",
-  "total": 33,
-  "updated": "2026-07-27",
+  "total": 34,
+  "updated": "2026-07-28",
   "description": "Interactive healing H5 experiments — Three.js WebGL, Canvas 2D, GLSL shaders, Web Audio, GSAP, creative coding for emotional design. Most works load Three.js r128 via CDN; silent-translator is the only zero-dependency work.",
   "tech_landscape": {
     "threejs": [
@@ -20,6 +20,7 @@
       "layered-mountains"
     ],
     "canvas_2d": [
+      "the-old-signal",
       "aquarium-2003",
       "first-light",
       "tree-remembers-wind",
@@ -59,6 +60,7 @@
       "layered-mountains"
     ],
     "web_audio": [
+      "the-old-signal",
       "tide-keeping-station",
       "aquarium-2003",
       "first-light",
@@ -120,6 +122,7 @@
       "inkmeditation"
     ],
     "touch_interaction": [
+      "the-old-signal",
       "tide-keeping-station",
       "aquarium-2003",
       "first-light",
@@ -151,6 +154,7 @@
       "silent-translator"
     ],
     "p5js": [
+      "the-old-signal",
       "aquarium-2003",
       "first-light",
       "tree-remembers-wind",
@@ -1162,6 +1166,44 @@
         "layered-mountains.jpg"
       ],
       "date": "2026-06-11"
+    },
+    {
+      "slug": "the-old-signal",
+      "title_en": "The Old Signal",
+      "title_zh": "旧信号 · The Old Signal",
+      "tagline": "一台信号不好的旧电视，红青两个色版错开着呼吸；你每碰它一次，它就调准一点——直到屏幕里那个旧日的自己，回头看你一眼。",
+      "tech": [
+        "p5.js",
+        "Canvas 2D",
+        "Web Audio API",
+        "localStorage"
+      ],
+      "render": "Canvas2D (p5.js)",
+      "has_audio": true,
+      "has_touch": true,
+      "particle_count": "N/A",
+      "dependencies": 1,
+      "healing_domain": "existential",
+      "keywords": [
+        "p5.js",
+        "canvas 2d",
+        "web audio api",
+        "touch interaction",
+        "localstorage persistence"
+      ],
+      "use_cases": [
+        "p5.js",
+        "canvas 2d",
+        "web audio api",
+        "touch interaction",
+        "localstorage persistence"
+      ],
+      "files": [
+        "the-old-signal.html",
+        "the-old-signal.md",
+        "the-old-signal_1.gif"
+      ],
+      "date": "2026-07-28"
     }
   ]
 }

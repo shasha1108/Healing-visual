@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<!--
+  Title: 旧信号 · The Old Signal
+  Tech: p5.js, Canvas 2D, Web Audio API, localStorage
+  Keywords: p5.js, canvas 2d, web audio api, touch interaction, localstorage persistence
+  Features: Anaglyph misregistration CRT tuner — each tap steps alignment via nonlinear beats until the past self turns to look back; p5.js pixel grid with deterministic hash-driven glitch, Web Audio CRT hum
+  Render: Canvas2D (p5.js)
+  Audio: yes
+  Touch: yes
+  Particles: N/A
+  Standalone: yes, single HTML file, 1 CDN dependencies
+  Repo: https://github.com/shasha1108/healing-visual-lab
+--><html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>旧信号 · The Old Signal</title>
+<!--
+  旧信号 · The Old Signal
+  一句话神话：一台落灰的旧 CRT 电视信号不好，红青两个色版错开着呼吸；
+  你每碰一次，它就调准一点——直到屏幕里那个旧日的自己变得清晰。
+  Palette: custom riso/anaglyph 受限色板（palettes.json 无复古 CRT 暖橙×青方向，故自定义并记录角色）
+  Mode C · p5 · 480×640 (3:4 小红书信息流竖图)
+-->
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #0b0910;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+  }
+  /* 环境光独立于容器，position: fixed（反模式 6） */
+  #env-glow {
+    position: fixed; top: 50%; left: 50%;
+    width: 560px; height: 480px;
+    transform: translate(-50%, -52%);
+    border-radius: 50%;
+    filter: blur(70px);
+    opacity: 0.22;
+    pointer-events: none;
+    z-index: 0;
+    background: radial-gradient(circle, rgba(63,217,232,0.55), rgba(63,217,232,0) 70%);
+    transition: background 1.2s ease, transform 1.8s ease, opacity 1.8s ease;
+  }
+  #stage-wrap {
+    position: relative;
+    width: min(92vw, 69vh);   /* JS sizeStage() 为权威，此为首帧 fallback */
+    aspect-ratio: 3 / 4;
+    z-index: 1;
+  }
+  #pixel-stage { position: absolute; inset: 0; }
+  #pixel-stage canvas {
+    position: relative; z-index: 1;
+    width: 100% !important; height: 100% !important;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    display: block;
+  }
+  #interact-layer {
+    position: absolute; inset: 0;
+    touch-action: none;
+    cursor: pointer;
+    z-index: 2;
+  }
+  #caption {
+    position: fixed; bottom: 14px; left: 0; right: 0;
+    text-align: center;
+    color: rgba(245, 234, 216, 0.28);
+    font: 12px/1.4 -apple-system, "PingFang SC", sans-serif;
+    letter-spacing: 0.35em;
+    pointer-events: none;
+    z-index: 1;
+  }
+</style>
+</head>
+<body>
+<div id="env-glow"></div>
+<div id="stage-wrap">
+  <div id="pixel-stage"></div>
+  <div id="interact-layer"></div>
+</div>
+<div id="caption">旧 信 号</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+<script>
+  if (typeof p5 === 'undefined') {
+    document.write('<script src="https://cdn.bootcdn.net/ajax/libs/p5.js/1.9.4/p5.min.js"><\/script>');
+  }
+</script>
+<script>
+'use strict';
+
+/* ================= 演示/拍摄参数 ================= */
+const QUERY = (typeof location !== 'undefined' && location.search)
+  ? new URLSearchParams(location.search) : new URLSearchParams('');
+const DEMO_ALIGN = parseFloat(QUERY.get('align') || 'NaN');
+const SHOT_MODE = QUERY.get('shot') === '1';
+const FRESH = QUERY.get('fresh') === '1';
+const CLEAN = QUERY.get('clean') === '1';
+if (CLEAN) { const c = document.getElementById('caption'); if (c) c.style.display = 'none'; }
+
+/* ================= 画布与几何权威（一切坐标由此派生） ================= */
+const CW = 480, CH = 640;
+const FLOOR_Y = 478;
+
+const TV = { x: 112, y: 196, w: 256, h: 228 };
+const BEZ = 16;
+const KNOB_COL_W = 48;
+const SCR = {
+  x: TV.x + BEZ,
+  y: TV.y + Math.round((TV.h - 126) / 2) - 4,
+  w: TV.w - BEZ * 2 - KNOB_COL_W - 8,
+  h: 126
+};
+const KNOB = {
+  x: TV.x + TV.w - BEZ - 26,
+  y1: SCR.y + 26,
+  y2: SCR.y + 74,
+  r: 13
+};
+const LED = { x: TV.x + TV.w - BEZ - 22, y: TV.y + TV.h - BEZ - 6 };
+const STAND = { x: TV.x - 26, y: TV.y + TV.h, w: TV.w + 52, h: 30 };
+const ANT = { x: TV.x + TV.w - 78, y: TV.y };
+
+const CELL = 2;                       // 屏幕内像素世界：1 格 = 2px
+const SCN = { cols: SCR.w / CELL, rows: SCR.h / CELL };  // 84 × 63
+
+/* ================= 受限色板（角色已命名） ================= */
+const PAL = {
+  roomTop:   [16, 12, 30],    // 背景暗部（深靛蓝，缩略图下轮廓可读）
+  roomBot:   [28, 20, 46],
+  floor:     [12, 9, 20],
+  casing:    [216, 205, 184], // 机身：90 年代奶油白
+  casingTop: [236, 227, 208],
+  casingDark:[160, 148, 126],
+  bezel:     [52, 44, 56],
+  screenBg:  [7, 11, 18],
+  cyan:      [63, 217, 232],  // 青版 = 现在的冷光
+  orange:    [255, 122, 69],  // 橙版 = 过去的体温
+  paper:     [245, 234, 216], // 纸米白高光
+  sun:       [255, 207, 138], // 旧日午后
+  hair:      [74, 48, 40],
+  sweater:   [232, 92, 58],
+  pants:     [95, 125, 140],
+  skin:      [242, 200, 148],
+  rug:       [122, 58, 46],
+  floorline: [122, 90, 66],
+  led:       [255, 217, 160]
+};
+
+/* ================= 状态（mechanical-memory：持久步进 + 临时脉冲分离） ================= */
+const SAVE_KEY = 'old-signal-v1';
+let align = 0.12;        // 色版对齐进度（持久，记忆）
+let alignTarget = 0.12;
+let tunePulse = 0;       // 本次调准的显露脉冲（会消失）
+let touchCount = 0;
+let knobIndex = 0;       // 旋钮格位（持久步进）
+let knobAngle = 0, knobTarget = 0, knobVel = 0;
+let bootT = 0;
+let hintPulse = 0;       // 无文字引导脉冲（未触碰前每 4s 重复）
+let hintTimer = 1.2;
+let turnTimer = 0;       // 「回头看你」事件剩余时间
+let turnCooldown = 2.0;  // 距下次回头的冷却
+let pendingTurn = -1;    // 最后一拍触发的回头倒计时（动作驱动，不等进度阈值）
+let turnFlash = 0;       // 回头瞬间的房间级暖光洪水（首次全强度，之后克制）
+let firstTurnDone = false;
+let freezeT = 0;         // 对视瞬间世界定格（动画时间停走）
+let animT = 0;           // 动画时间（冻结时暂停）
+let envBloomed = false;
+
+/* 非线性调准节拍：从当前进度推导下一步（自愈旧存档），第四拍落进 storm 带 */
+function tuneStep(at) {
+  return at < 0.42 ? 0.30 : at < 0.67 ? 0.25 : at < 0.87 ? 0.20 : 0.13;
+}
+function isStorm(at) { return at >= 0.80 && at < 1; }
+/* 确定性 hash（draw 内禁 random；glitch 只是时间的函数） */
+function hashN(n) { const x = Math.sin(n * 127.1) * 43758.5453; return x - Math.floor(x); }
+
+function loadState() {
+  if (FRESH) { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} return; }
+  try {
+    const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
+    if (s) {
+      align = alignTarget = Math.max(0.05, Math.min(1, s.align || 0.12));
+      knobIndex = s.knobIndex || 0;
+      touchCount = s.touches || 0;
+      knobAngle = knobTarget = knobIndex * (Math.PI / 6);
+    }
+  } catch (e) {}
+}
+function saveState() {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ align: alignTarget, knobIndex, touches: touchCount }));
+  } catch (e) {}
+}
+
+/* ================= 预生成（确定性：draw 内禁 random） ================= */
+const NOISE_FRAMES = [];   // 6 帧静态噪点
+const GRAIN = [];          // 纸张纹理（接近对齐时浮现，riso 纸感）
+const DUST = [];           // 房间浮尘
+let kidBack = [], kidTurn = [];
+
+const BAYER_4X4 = [
+  [ 0,  8,  2, 10],
+  [12,  4, 14,  6],
+  [ 3, 11,  1,  9],
+  [15,  7, 13,  5]
+];
+
+const KID_BACK_ART = [
+  '....hhhh....',
+  '...hhhhhh...',
+  '..hhhhhhhh..',
+  '..hhhhhhhh..',
+  '...hhhhhh...',
+  '....bbbb....',
+  '...bbbbbb...',
+  '..bbbbbbbb..',
+  '..bbbbbbbb..',
+  '..bbbbbbbb..',
+  '.llllllllll.',
+  '.llllllllll.'
+];
+const KID_TURN_ART = [
+  '....hhhh....',
+  '...hhhhhh...',
+  '..hhhhhff...',
+  '..hhhhfef...',
+  '...hhhff....',
+  '....bbbb....',
+  '...bbbbbb...',
+  '..bbbbbbbb..',
+  '..bbbbbbbb..',
+  '..bbbbbbbb..',
+  '.llllllllll.',
+  '.llllllllll.'
+];
+function parseSprite(art) {
+  const out = [];
+  for (let r = 0; r < art.length; r++)
+    for (let c = 0; c < art[r].length; c++)
+      if (art[r][c] !== '.') out.push({ c, r, role: art[r][c] });
+  return out;
+}
+
+/* 屏幕内小场景（格坐标，84×63 格）——窗 + 落日 + 旧日的自己 + 地毯 */
+const WIN = { x: 12, y: 9, w: 26, h: 26 };
+const SUNP = { x: 25, y: 31, r: 8 };   // 落日：大半颗沉在窗框下沿，轮廓一眼可读
+const KCELL = 3;                    // 小孩精灵：1 格 = 3px（比世界格大，主角要可读）
+const KIDP = { x: 33, y: 21 };      // 精灵左上角（KCELL 单位）
+const FLOOR_ROW = 52;
+const RUG = { x: 49, y: 49, w: 20, h: 6 };
+
+function pregen() {
+  kidBack = parseSprite(KID_BACK_ART);
+  kidTurn = parseSprite(KID_TURN_ART);
+  for (let f = 0; f < 6; f++) {
+    const frame = [];
+    for (let i = 0; i < 130; i++) {
+      frame.push({
+        x: Math.floor(random(0, SCR.w / 2)) * 2,
+        y: Math.floor(random(0, SCR.h / 2)) * 2,
+        w: random() < 0.25 ? 4 : 2,
+        h: 2,
+        a: random(30, 130),
+        warm: random() < 0.3
+      });
+    }
+    NOISE_FRAMES.push(frame);
+  }
+  for (let i = 0; i < 420; i++) {
+    GRAIN.push({
+      x: Math.floor(random(0, SCR.w / 2)) * 2,
+      y: Math.floor(random(0, SCR.h / 2)) * 2,
+      a: random(4, 13),
+      warm: random() < 0.4
+    });
+  }
+  for (let i = 0; i < 14; i++) {
+    DUST.push({
+      x: random(40, CW - 40), y: random(80, FLOOR_Y - 30),
+      ph: random(TWO_PI), sp: random(0.2, 0.6), amp: random(4, 14)
+    });
+  }
+}
+
+/* ================= 音频（首次交互后初始化，master 从 0 淡入） ================= */
+let audioCtx = null, masterGain = null;
+let humGain = null, humOsc = null, padGain = null, padOscs = [];
+let audioStarted = false;
+
+function ensureAudio() {
+  if (audioStarted) return;
+  audioStarted = true;
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();  // autoplay 策略：仅在用户手势后调用
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = 0;
+    masterGain.connect(audioCtx.destination);
+    masterGain.gain.linearRampToValueAtTime(0.85, audioCtx.currentTime + 0.5);
+    // CRT 低鸣：50Hz 正弦 + 低通噪声，音量随信号质量变化
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sine'; osc.frequency.value = 50;
+    humOsc = osc;
+    const og = audioCtx.createGain(); og.gain.value = 0.35;
+    const nbuf = audioCtx.createBuffer(1, audioCtx.sampleRate, audioCtx.sampleRate);
+    const nd = nbuf.getChannelData(0);
+    for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+    const nsrc = audioCtx.createBufferSource();
+    nsrc.buffer = nbuf; nsrc.loop = true;
+    const nlp = audioCtx.createBiquadFilter();
+    nlp.type = 'lowpass'; nlp.frequency.value = 220;
+    const ng = audioCtx.createGain(); ng.gain.value = 0.65;
+    humGain = audioCtx.createGain(); humGain.gain.value = 0.03;
+    osc.connect(og); og.connect(humGain);
+    nsrc.connect(nlp); nlp.connect(ng); ng.connect(humGain);
+    humGain.connect(masterGain);
+    osc.start(); nsrc.start();
+    // 调准后的暖垫音（G3 B3 D4，极轻）
+    padGain = audioCtx.createGain(); padGain.gain.value = 0;
+    const plp = audioCtx.createBiquadFilter();
+    plp.type = 'lowpass'; plp.frequency.value = 800;
+    padGain.connect(plp); plp.connect(masterGain);
+    [196, 246.9, 293.7].forEach(f => {
+      const o = audioCtx.createOscillator();
+      o.type = 'sine'; o.frequency.value = f;
+      const g = audioCtx.createGain(); g.gain.value = 0.33;
+      o.connect(g); g.connect(padGain); o.start();
+      padOscs.push(o);
+    });
+  } catch (e) { audioCtx = null; }
+}
+function blip() {
+  if (!audioCtx) return;
+  try {
+    const dur = 0.09;
+    const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * dur, audioCtx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+    const src = audioCtx.createBufferSource(); src.buffer = buf;
+    const bp = audioCtx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = 1600; bp.Q.value = 1.4;
+    const g = audioCtx.createGain(); g.gain.value = 0.3;
+    src.connect(bp); bp.connect(g); g.connect(masterGain);
+    src.onended = () => { try { src.disconnect(); bp.disconnect(); g.disconnect(); } catch (e) {} };
+    src.start();
+  } catch (e) {}
+}
+
+/* ================= 交互（DOM addEventListener + getBoundingClientRect，反模式 2） ================= */
+const interactEl = document.getElementById('interact-layer');
+interactEl.addEventListener('pointerdown', function (e) {
+  const r = interactEl.getBoundingClientRect();
+  const px = (e.clientX - r.left) * (CW / r.width);
+  const py = (e.clientY - r.top) * (CH / r.height);
+  ensureAudio();
+  if (px >= TV.x - 10 && px <= TV.x + TV.w + 10 && py >= TV.y - 46 && py <= TV.y + TV.h + 10) {
+    tune();
+  }
+  e.preventDefault();
+}, { passive: false });
+
+function tune() {
+  touchCount++;
+  knobIndex++;
+  knobTarget = knobIndex * (Math.PI / 6);           // 旋钮持久步进
+  alignTarget = Math.min(1, alignTarget + tuneStep(alignTarget)); // 非线性节拍
+  tunePulse = 1;                                     // 显露脉冲
+  if (alignTarget >= 1) pendingTurn = 0.55;          // 最后一拍：白光退去时正好回头
+  blip();
+  if (alignTarget >= 1 && humOsc && audioCtx) {
+    // 断电式收声：50Hz 轰鸣 pitch down 到 18Hz，随后彻底切断（听觉负空间）
+    try {
+      humOsc.frequency.cancelScheduledValues(audioCtx.currentTime);
+      humOsc.frequency.setValueAtTime(50, audioCtx.currentTime);
+      humOsc.frequency.exponentialRampToValueAtTime(18, audioCtx.currentTime + 0.5);
+    } catch (e) {}
+  }
+  saveState();
+}
+
+/* ================= p5 主流程 ================= */
+function setup() {
+  const c = createCanvas(CW, CH);
+  c.parent('pixel-stage');
+  noSmooth();
+  pixelDensity(1);
+  drawingContext.imageSmoothingEnabled = false;
+  sizeStage();
+  loadState();
+  pregen();
+  if (!isNaN(DEMO_ALIGN)) { align = alignTarget = Math.max(0, Math.min(1, DEMO_ALIGN)); }
+  if (QUERY.get('turn') === '1') { turnTimer = 2.4; firstTurnDone = true; }  // 演示：直接取景回头态
+  if (SHOT_MODE) bootT = 99;
+}
+
+/* stage 缩放权威：wrapper 整数尺寸，canvas 由 CSS 拉伸（反模式 1：不碰 canvas style） */
+function sizeStage() {
+  const s = document.getElementById('stage-wrap');
+  if (!s) return;
+  const scale = Math.min((window.innerWidth * 0.92) / CW, (window.innerHeight * 0.90) / CH);
+  s.style.width = Math.floor(CW * scale) + 'px';
+  s.style.height = Math.floor(CH * scale) + 'px';
+}
+function windowResized() { sizeStage(); }
+
+function draw() {
+  const dt = Math.min(deltaTime * 0.001, 0.05);
+  bootT += dt;
+  updateWorld(dt);
+
+  const tuned = align > 0.985;
+  updateEnvGlow(align);
+
+  clear();
+  drawRoom(animT, align, tunePulse, tuned);
+  drawTVBody(animT, align);
+  drawScreen(animT, align, tunePulse, tuned);
+  drawSpill(animT, align, tunePulse, tuned);
+}
+
+/* 世界状态更新（QA 契约复用的薄入口：draw 与 runtime_qa 共用同一实现） */
+function updateWorld(dt) {
+  // 终段对齐速率加倍：最后一拍后画面在 ~0.5s 内清晰，情绪不等
+  align += (alignTarget - align) * (1 - Math.exp(-(alignTarget >= 1 ? 8 : 4.5) * dt));
+  const tunedNow = align > 0.985;
+  const storm = isStorm(alignTarget);
+  // 最后一拍的白光慢慢退去（0.8），此前干脆利落（2.0）
+  tunePulse *= Math.exp((alignTarget >= 1 ? -0.8 : -2.0) * dt);
+  turnFlash *= Math.exp(-1.1 * dt);
+  // 旋钮弹簧（机械记忆 recipe）
+  const err = knobTarget - knobAngle;
+  knobVel += err * 90 * dt;
+  knobVel *= Math.exp(-14 * dt);
+  knobAngle += knobVel * dt;
+  hintPulse *= Math.exp(-1.6 * dt);
+  // 回头事件由「最后一拍」动作触发（pendingTurn），周期回头由冷却驱动
+  if (pendingTurn > 0) {
+    pendingTurn -= dt;
+    if (pendingTurn <= 0) fireTurn();
+  }
+  if (tunedNow) {
+    if (turnTimer > 0) {
+      turnTimer -= dt;
+    } else if (pendingTurn <= 0) {
+      turnCooldown -= dt;
+      if (turnCooldown <= 0) fireTurn();
+    }
+  }
+  // 世界定格：对视瞬间动画时间停走（噪点/呼吸/扫描线全静止）
+  if (freezeT > 0) freezeT -= dt; else animT += dt;
+  // 音频：storm 态轰鸣加剧；调准后彻底切断，暖垫音隔 ~1s 才进来
+  if (audioCtx && humGain) {
+    if (tunedNow) {
+      humGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.1);
+    } else {
+      humGain.gain.setTargetAtTime((0.012 + (1 - align) * 0.035) * (storm ? 1.8 : 1), audioCtx.currentTime, 0.15);
+    }
+    padGain.gain.setTargetAtTime(tunedNow ? 0.05 : 0, audioCtx.currentTime, 1.2);
+  }
+}
+
+/* 回头看你一眼：首次 = 全强度暖光洪水 + 时间定格；之后克制 */
+function fireTurn() {
+  turnTimer = 2.4;
+  turnCooldown = 8;
+  turnFlash = firstTurnDone ? 0.45 : 1;
+  if (!firstTurnDone) { firstTurnDone = true; freezeT = 0.7; }
+}
+
+/* ================= L0 光滑环境：暗室 ================= */
+function drawRoom(t, al, pulse, tuned) {
+  const ctx = drawingContext;
+  const g = ctx.createLinearGradient(0, 0, 0, CH);
+  g.addColorStop(0, 'rgb(' + PAL.roomTop.join(',') + ')');
+  g.addColorStop(1, 'rgb(' + PAL.roomBot.join(',') + ')');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, CW, CH);
+  // 地板
+  fill(PAL.floor[0], PAL.floor[1], PAL.floor[2]);
+  noStroke();
+  rect(0, FLOOR_Y, CW, CH - FLOOR_Y);
+  // 屏幕光在地板上的光池（径向衰减，全宽铺满，无硬边）
+  const warm = Math.round(al * 255);
+  const pool = ctx.createRadialGradient(CW / 2, FLOOR_Y + 30, 10, CW / 2, FLOOR_Y + 30, 250);
+  pool.addColorStop(0, 'rgba(' + Math.round(63 + warm * 0.6) + ',' + Math.round(217 - warm * 0.35) + ',' + Math.round(232 - warm * 0.55) + ',' + (0.09 + al * 0.15 + pulse * 0.08) + ')');
+  pool.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = pool;
+  ctx.fillRect(0, FLOOR_Y, CW, CH - FLOOR_Y);
+  // 浮尘（预生成 + sin 位移，确定性）
+  DUST.forEach(d => {
+    const dx = d.x + Math.sin(t * d.sp + d.ph) * d.amp;
+    const dy = d.y + Math.sin(t * d.sp * 0.7 + d.ph * 2) * d.amp * 0.5;
+    const near = Math.max(0, 1 - Math.abs(dx - (SCR.x + SCR.w / 2)) / 240);
+    fill(245, 234, 216, 14 + near * (26 + al * 30) + pulse * 20);
+    rect(Math.round(dx / 2) * 2, Math.round(dy / 2) * 2, 2, 2);
+  });
+  // 回头瞬间：过去的温暖穿透屏幕，整个房间被镀上午后余晖
+  if (turnFlash > 0.01) {
+    const fg = ctx.createLinearGradient(0, 0, 0, CH);
+    fg.addColorStop(0, 'rgba(255,178,96,0)');
+    fg.addColorStop(0.55, 'rgba(255,178,96,' + (turnFlash * 0.16).toFixed(3) + ')');
+    fg.addColorStop(1, 'rgba(255,150,70,' + (turnFlash * 0.28).toFixed(3) + ')');
+    ctx.fillStyle = fg;
+    ctx.fillRect(0, 0, CW, CH);
+  }
+}
+
+/* ================= L1 载体：CRT 机身（像素 rect，整数坐标） ================= */
+function pxRect(x, y, w, h, col) {
+  fill(col[0], col[1], col[2]);
+  rect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+}
+function drawTVBody(t, al) {
+  const ctx = drawingContext;
+  // 底座
+  pxRect(STAND.x, STAND.y, STAND.w, 6, PAL.casingDark);
+  pxRect(STAND.x + 4, STAND.y + 6, STAND.w - 8, STAND.h - 12, PAL.casing);
+  pxRect(STAND.x + 10, STAND.y + STAND.h - 6, 30, 6, PAL.casingDark);
+  pxRect(STAND.x + STAND.w - 40, STAND.y + STAND.h - 6, 30, 6, PAL.casingDark);
+  // 支撑脚
+  pxRect(TV.x + 18, TV.y + TV.h, 24, STAND.y - (TV.y + TV.h), PAL.casingDark);
+  pxRect(TV.x + TV.w - 42, TV.y + TV.h, 24, STAND.y - (TV.y + TV.h), PAL.casingDark);
+  // 天线：竖杆 + 阶梯像素 V（禁非 90° 旋转，用楼梯像素画斜线）
+  pxRect(ANT.x, ANT.y - 34, 4, 34, PAL.casingTop);
+  for (let i = 0; i < 8; i++) {
+    pxRect(ANT.x - 4 - i * 3, ANT.y - 36 - i * 3, 4, 4, PAL.casingTop);
+    pxRect(ANT.x + 4 + i * 3, ANT.y - 36 - i * 3, 4, 4, PAL.casingTop);
+  }
+  pxRect(ANT.x - 30, ANT.y - 62, 6, 6, PAL.casing);
+  pxRect(ANT.x + 28, ANT.y - 62, 6, 6, PAL.casing);
+  // 机身外壳（角部切像素）
+  pxRect(TV.x + 4, TV.y, TV.w - 8, TV.h, PAL.casing);
+  pxRect(TV.x, TV.y + 4, TV.w, TV.h - 8, PAL.casing);
+  pxRect(TV.x + 2, TV.y + 2, TV.w - 4, TV.h - 4, PAL.casing);
+  // 顶部受光 + 底部暗部
+  pxRect(TV.x + 6, TV.y + 2, TV.w - 12, 4, PAL.casingTop);
+  pxRect(TV.x + 4, TV.y + TV.h - 6, TV.w - 8, 4, PAL.casingDark);
+  pxRect(TV.x + 2, TV.y + 6, 3, TV.h - 12, PAL.casingTop);   // 左缘
+  pxRect(TV.x + TV.w - 5, TV.y + 6, 3, TV.h - 12, PAL.casingDark); // 右缘
+  // 屏幕边框（bezel）
+  pxRect(SCR.x - 6, SCR.y - 6, SCR.w + 12, SCR.h + 12, PAL.bezel);
+  pxRect(SCR.x - 6, SCR.y - 6, SCR.w + 12, 3, PAL.casingDark);
+  pxRect(SCR.x - 6, SCR.y + SCR.h + 3, SCR.w + 12, 3, PAL.casingTop);
+  // 旋钮 ×2（像素圆 + 指示点，knobAngle 弹簧驱动）
+  drawKnob(KNOB.x, KNOB.y1, KNOB.r, knobAngle, t);
+  drawKnob(KNOB.x, KNOB.y2, KNOB.r, knobAngle * 0.5 + 1.2, t);
+  // 电源 LED（常亮微暖，调准后更亮）
+  const la = 120 + al * 120;
+  fill(PAL.led[0], PAL.led[1], PAL.led[2], la);
+  rect(LED.x, LED.y, 4, 4);
+  // 品牌位：bezel 下沿四个像素点（无文字）
+  pxRect(TV.x + TV.w / 2 - 9, TV.y + TV.h - BEZ + 4, 3, 3, PAL.casingDark);
+  pxRect(TV.x + TV.w / 2 - 3, TV.y + TV.h - BEZ + 4, 3, 3, PAL.casingDark);
+  pxRect(TV.x + TV.w / 2 + 3, TV.y + TV.h - BEZ + 4, 3, 3, PAL.casingDark);
+}
+function drawKnob(cx, cy, r, ang, t) {
+  // 像素圆（Bresenham 行填充，整数）
+  for (let dy = -r; dy <= r; dy += 2) {
+    const hw = Math.floor(Math.sqrt(r * r - dy * dy) / 2) * 2;
+    pxRect(cx - hw, cy + dy, hw * 2, 2, PAL.casingDark);
+  }
+  for (let dy = -r + 2; dy <= r - 2; dy += 2) {
+    const hw = Math.floor(Math.sqrt((r - 2) * (r - 2) - dy * dy) / 2) * 2;
+    pxRect(cx - hw, cy + dy, hw * 2, 2, PAL.casingTop);
+  }
+  // 指示点（奶油机身上用深色才读得出）
+  const ix = Math.round((cx + Math.cos(ang) * (r - 5)) / 2) * 2;
+  const iy = Math.round((cy + Math.sin(ang) * (r - 5)) / 2) * 2;
+  pxRect(ix - 1, iy - 1, 3, 3, PAL.bezel);
+}
+
+/* ================= L2 内部世界：双色版错版 + 噪点 + 扫描线 ================= */
+function drawScreen(t, al, pulse, tuned) {
+  const ctx = drawingContext;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(SCR.x, SCR.y, SCR.w, SCR.h);
+  ctx.clip();
+  // 拍打的物理反馈是「垂直同步失效」：画面跳，机箱和玻璃不跳
+  ctx.translate(0, Math.round(pulse * 5 * Math.sin(bootT * 47)));
+  // 屏幕底
+  fill(PAL.screenBg[0], PAL.screenBg[1], PAL.screenBg[2]);
+  rect(SCR.x, SCR.y, SCR.w, SCR.h);
+  // 微弱屏光呼吸（暗室里的活物感）
+  const breathe = 0.5 + 0.5 * Math.sin(t * 1.1);
+  fill(18, 30, 44, 26 + breathe * 22 + al * 30);
+  rect(SCR.x, SCR.y, SCR.w, SCR.h);
+
+  // 错版位移：呼吸的幅度随对齐收敛；storm 态（0.8–0.97）记忆抗拒，毛刺弹开
+  const storm = isStorm(alignTarget);
+  const gseed = Math.floor(t * 8);
+  const glitch = storm && hashN(gseed) < 0.3 ? 5 : 0;
+  const offMax = 11;
+  const off = (1 - al) * offMax * (0.55 + 0.45 * Math.sin(t * 1.4)) + pulse * 1.5 + glitch;
+  const plateA = 0.38 + 0.62 * al + pulse * 0.25;
+
+  // 双色版永远对称：红青叠合出白光是错版美学的根基，不做通道剥离
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = Math.min(1, plateA);
+  drawScenePlate(-off, PAL.cyan);
+  drawScenePlate(off, PAL.orange);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+
+  // 清晰细节层：接近对齐时浮现；触碰瞬间「拍到信号」；storm 中画面挣扎着闪现
+  const stormGlimpse = storm && hashN(gseed + 40) < 0.45 ? 0.5 : 0;
+  const glimpse = Math.max(pulse * 0.9 * (1 - al), stormGlimpse);
+  const detailA = Math.max(glimpse, Math.max(0, Math.min(1, (al - 0.78) / 0.15)));
+  if (detailA > 0) drawSceneDetail(detailA, al > 0.9, t);
+
+  // 触碰白闪 + storm 电压不稳的偶发闪白
+  const flick = storm && hashN(gseed + 80) < 0.15 ? 0.35 : 0;
+  if (pulse > 0.02 || flick > 0) {
+    fill(245, 234, 216, Math.round(Math.min(1, pulse + flick) * 64));
+    rect(SCR.x, SCR.y, SCR.w, SCR.h);
+  }
+
+  // 静态噪点（预生成帧循环；storm 态狂躁加倍）
+  const nf = NOISE_FRAMES[Math.floor(t * 9) % 6];
+  const na = Math.min(1.35, ((1 - al) * 1.25 + pulse * 0.4) * (storm ? 1.9 : 1));
+  nf.forEach(n => {
+    const col = n.warm ? PAL.orange : PAL.paper;
+    fill(col[0], col[1], col[2], n.a * na);
+    rect(SCR.x + n.x, SCR.y + n.y, n.w, n.h);
+  });
+  // 纸张纹理：接近对齐时噪点化为 riso 纸感（预生成，极淡）
+  const ga = Math.max(0, (al - 0.85) / 0.15);
+  if (ga > 0) {
+    GRAIN.forEach(g => {
+      fill(g.warm ? 255 : 245, g.warm ? 220 : 234, g.warm ? 170 : 216, g.a * ga);
+      rect(SCR.x + g.x, SCR.y + g.y, 2, 2);
+    });
+  }
+  // 滚动亮带（时间驱动，确定性）
+  const ry = SCR.y + ((t * 9) % (SCR.h + 36)) - 18;
+  fill(245, 234, 216, 10);
+  rect(SCR.x, ry, SCR.w, 6);
+  fill(245, 234, 216, 6);
+  rect(SCR.x, ry + 6, SCR.w, 4);
+  // 扫描线（像素质感）
+  fill(0, 0, 0, 46);
+  for (let y = SCR.y; y < SCR.y + SCR.h; y += 4) rect(SCR.x, y, SCR.w, 2);
+  ctx.restore();
+  // 屏幕曲面暗角（属于玻璃，不随画面跳动）
+  const vg = ctx.createRadialGradient(
+    SCR.x + SCR.w / 2, SCR.y + SCR.h / 2, SCR.h * 0.3,
+    SCR.x + SCR.w / 2, SCR.y + SCR.h / 2, SCR.w * 0.72);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,0.42)');
+  ctx.fillStyle = vg;
+  ctx.fillRect(SCR.x, SCR.y, SCR.w, SCR.h);
+}
+
+/* 单块色版：整个小场景的单色剪影（错开即双影，叠合即亮白） */
+function drawScenePlate(dx, col) {
+  fill(col[0], col[1], col[2]);
+  const ox = SCR.x + Math.round(dx);
+  // 落日（实心半圆，被窗框下沿切断 = 正在落山；先画太阳再画窗框）
+  for (let dy = -SUNP.r; dy <= SUNP.r; dy++) {
+    const hw = Math.floor(Math.sqrt(SUNP.r * SUNP.r - dy * dy));
+    const cy = SUNP.y + dy;
+    if (cy < WIN.y + 2 || cy > WIN.y + WIN.h - 2) continue;
+    const x0 = Math.max(SUNP.x - hw, WIN.x + 2), x1 = Math.min(SUNP.x + hw, WIN.x + WIN.w - 2);
+    if (x1 > x0) cellRect(ox, x0, cy, x1 - x0, 1);
+  }
+  // 窗框
+  cellRect(ox, WIN.x, WIN.y, WIN.w, 2);
+  cellRect(ox, WIN.x, WIN.y + WIN.h - 2, WIN.w, 2);
+  cellRect(ox, WIN.x, WIN.y, 2, WIN.h);
+  cellRect(ox, WIN.x + WIN.w - 2, WIN.y, 2, WIN.h);
+  cellRect(ox, WIN.x + WIN.w / 2 - 1, WIN.y, 2, WIN.h);
+  cellRect(ox, WIN.x, WIN.y + WIN.h / 2 - 1, WIN.w, 2);
+  // 旧日的自己（背对坐姿，KCELL 放大）
+  kidBack.forEach(p => rect(ox + (KIDP.x + p.c) * KCELL, SCR.y + (KIDP.y + p.r) * KCELL, KCELL, KCELL));
+  // 地毯
+  for (let r = 0; r < RUG.h; r += 2) {
+    const shrink = Math.abs(r - RUG.h / 2);
+    cellRect(ox, RUG.x + shrink, RUG.y + r, RUG.w - shrink * 2, 2);
+  }
+  // 地板线
+  cellRect(ox, 4, FLOOR_ROW, SCN.cols - 8, 1);
+}
+function cellRect(ox, cx, cy, cw, ch) {
+  rect(ox + cx * CELL, SCR.y + cy * CELL, cw * CELL, ch * CELL);
+}
+
+/* 清晰细节层：真实色彩浮现（对齐奖励 = 旧日变得可辨认） */
+function drawSceneDetail(a, tuned, t) {
+  const ox = SCR.x;
+  const A = Math.round(a * 235);
+  // 窗内午后暖光
+  fill(PAL.sun[0], PAL.sun[1], PAL.sun[2], Math.round(A * (0.5 + 0.1 * Math.sin(t * 0.9))));
+  cellRect(ox, WIN.x + 2, WIN.y + 2, WIN.w - 4, WIN.h - 4);
+  // 落日（实心暖盘，沉在窗框下沿；先太阳后窗框）
+  fill(255, 178, 96, A);
+  for (let dy = -SUNP.r; dy <= SUNP.r; dy++) {
+    const hw = Math.floor(Math.sqrt(SUNP.r * SUNP.r - dy * dy));
+    const cy = SUNP.y + dy;
+    if (cy < WIN.y + 2 || cy > WIN.y + WIN.h - 2) continue;
+    const x0 = Math.max(SUNP.x - hw, WIN.x + 2), x1 = Math.min(SUNP.x + hw, WIN.x + WIN.w - 2);
+    if (x1 > x0) cellRect(ox, x0, cy, x1 - x0, 1);
+  }
+  // 窗框纸白
+  fill(PAL.paper[0], PAL.paper[1], PAL.paper[2], A);
+  cellRect(ox, WIN.x, WIN.y, WIN.w, 2);
+  cellRect(ox, WIN.x, WIN.y + WIN.h - 2, WIN.w, 2);
+  cellRect(ox, WIN.x, WIN.y, 2, WIN.h);
+  cellRect(ox, WIN.x + WIN.w - 2, WIN.y, 2, WIN.h);
+  cellRect(ox, WIN.x + WIN.w / 2 - 1, WIN.y, 2, WIN.h);
+  cellRect(ox, WIN.x, WIN.y + WIN.h / 2 - 1, WIN.w, 2);
+  // 旧日的自己：调准后才会「回头看你一眼」（事件，不是固定姿势）
+  const looking = tuned && turnTimer > 0;
+  const sprite = looking ? kidTurn : kidBack;
+  sprite.forEach(p => {
+    const col = p.role === 'h' ? PAL.hair : p.role === 'b' ? PAL.sweater
+      : p.role === 'f' ? PAL.skin : p.role === 'e' ? [40, 26, 22] : PAL.pants;
+    fill(col[0], col[1], col[2], A);
+    rect(ox + (KIDP.x + p.c) * KCELL, SCR.y + (KIDP.y + p.r) * KCELL, KCELL, KCELL);
+  });
+  // 地毯
+  fill(PAL.rug[0], PAL.rug[1], PAL.rug[2], Math.round(A * 0.85));
+  for (let r = 0; r < RUG.h; r += 2) {
+    const shrink = Math.abs(r - RUG.h / 2);
+    cellRect(ox, RUG.x + shrink, RUG.y + r, RUG.w - shrink * 2, 2);
+  }
+  // 地板线
+  fill(PAL.floorline[0], PAL.floorline[1], PAL.floorline[2], Math.round(A * 0.7));
+  cellRect(ox, 4, FLOOR_ROW, SCN.cols - 8, 1);
+}
+
+/* ================= L3 屏幕溢光：调准后暖光洒进房间（余韵 2–6s） ================= */
+function drawSpill(t, al, pulse, tuned) {
+  const ctx = drawingContext;
+  const strength = al * 0.5 + pulse * 0.5 + (tuned ? 0.25 : 0) + turnFlash * 0.8;
+  if (strength < 0.03) return;
+  ctx.save();
+  const g = ctx.createRadialGradient(
+    SCR.x + SCR.w / 2, SCR.y + SCR.h / 2, 10,
+    SCR.x + SCR.w / 2, SCR.y + SCR.h / 2, 190 + turnFlash * 120);
+  const wr = Math.round(63 + al * 192), wg = Math.round(217 - al * 95), wb = Math.round(232 - al * 164);
+  g.addColorStop(0, 'rgba(' + wr + ',' + wg + ',' + wb + ',' + Math.min(0.35, 0.16 * strength) + ')');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(SCR.x - 120, SCR.y - 90, SCR.w + 240, SCR.h + 260);
+  // 回头瞬间：电视机身也被镀上余晖
+  if (turnFlash > 0.02) {
+    ctx.globalCompositeOperation = 'screen';
+    ctx.fillStyle = 'rgba(255,170,90,' + (turnFlash * 0.22).toFixed(3) + ')';
+    ctx.fillRect(TV.x - 10, TV.y - 60, TV.w + 20, TV.h + 76);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  ctx.restore();
+}
+
+/* ================= 环境光 div 随对齐由青转暖 ================= */
+let envGlowEl = null, envGlowTick = 0;
+function updateEnvGlow(al) {
+  if (!envGlowEl) envGlowEl = document.getElementById('env-glow');
+  // 首次回头：环境光胀满整个视野（光芒填满手机屏幕）
+  if (envGlowEl && turnFlash >= 0.99 && !envBloomed) {
+    envBloomed = true;
+    envGlowEl.style.transform = 'translate(-50%,-52%) scale(2.3)';
+    envGlowEl.style.opacity = '0.3';
+  }
+  if (++envGlowTick % 12 !== 0) return;
+  if (!envGlowEl) return;
+  const r = Math.round(63 + al * 192), g = Math.round(217 - al * 95), b = Math.round(232 - al * 164);
+  envGlowEl.style.background =
+    'radial-gradient(circle, rgba(' + r + ',' + g + ',' + b + ',0.5), rgba(' + r + ',' + g + ',' + b + ',0) 70%)';
+}
+</script>
+<script type="application/pixel-bloom-qa">
+/* runtime QA 契约：只引用生产函数 tune()/updateWorld()，不复制物理 */
+globalThis.__PIXEL_BLOOM_QA__ = {
+  horizonSeconds: 12,
+  dt: 1 / 60,
+  requiredStates: ["MISALIGNED", "TUNING", "TUNED"],
+  terminalStates: ["TUNED"],
+
+  reset() {
+    align = alignTarget = 0.12;
+    tunePulse = 0; hintPulse = 0; hintTimer = 99; bootT = 0;
+    knobIndex = 0; knobAngle = knobTarget = knobVel = 0;
+    touchCount = 0;
+    turnTimer = 0; turnCooldown = 0; pendingTurn = -1;
+    turnFlash = 0; firstTurnDone = false; freezeT = 0; animT = 0;
+    this._qaSteps = 0;
+  },
+
+  begin() {
+    tune();   // 真实生产交互：持久步进 + 脉冲
+  },
+
+  step(dt) {
+    // 模拟用户每 0.5s 再调一次，直到完全调准（tune 是生产函数）
+    this._qaSteps = (this._qaSteps || 0) + 1;
+    if (alignTarget < 1 && this._qaSteps % 30 === 0) tune();
+    updateWorld(dt);   // 与 draw() 共用同一更新实现
+  },
+
+  state() {
+    if (align > 0.985) return "TUNED";
+    if (alignTarget > 0.12 || align > 0.15) return "TUNING";
+    return "MISALIGNED";
+  },
+
+  entities() {
+    return [];   // 无受边界约束的自主实体；尘粒为纯氛围装饰
+  },
+
+  contains(x, y) {
+    return x >= 0 && x <= 480 && y >= 0 && y <= 640;
+  }
+};
+</script>
+</body>
+</html>
