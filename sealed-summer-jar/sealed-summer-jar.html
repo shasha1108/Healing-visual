@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<!--
+  Title: The Sealed Four O'Clock · 封存的四点钟
+  Concept: 一只玻璃罐把一个不会结束的夏日下午封存了起来。
+  Summary: 静置时风扇、窗帘和树影持续呼吸；触碰罐盖的卡扣，封住的风短暂放出来；点击小猫、风铃皆有互动。
+  Tech: p5.js, Canvas 2D, Web Audio API
+  Keywords: p5.js, canvas 2d, web audio api, touch interaction
+  Features: Pixel-art glass-jar diorama in p5.js Canvas 2D with a Frutiger Aero palette; fully synthesized wind ambience and interaction SFX via Web Audio API; pointer interactions release sealed wind, tap the cat and wind chimes.
+  Render: Canvas2D (p5.js)
+  Audio: yes
+  Touch: yes
+  Particles: N/A
+  Standalone: yes, single HTML file, 1 CDN dependencies
+  Repo: https://github.com/shasha1108/healing-visual-lab
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>封存的四点钟</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+<script>window.p5||document.write('<script src="https://cdn.bootcdn.net/ajax/libs/p5.js/1.9.0/p5.min.js"><\\/script>');</script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;height:100%;overflow:hidden;background:#b9f2ff;touch-action:none}
+  body{background:radial-gradient(ellipse at 52% 34%,#f6ffff 0%,#b8f1fb 36%,#69cce2 72%,#2585a8 100%)}
+  #aero-glow{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 72%,rgba(255,255,255,.42),transparent 43%),radial-gradient(circle at 24% 20%,rgba(255,255,255,.34),transparent 24%)}
+  #pixel-stage{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);overflow:hidden}
+  #pixel-stage canvas{display:block;width:100%!important;height:100%!important;image-rendering:pixelated;pointer-events:none;z-index:3}
+  #interact-layer{position:absolute;inset:0;z-index:5;cursor:pointer}
+</style>
+</head>
+<body>
+<div id="aero-glow"></div>
+<div id="pixel-stage"><div id="interact-layer" aria-label="互动区域"></div></div>
+<script>
+const BASE_W=480, BASE_H=720;
+const PALETTE={
+  name:'Aero Aqua 16',
+  role:'Frutiger Aero 玻璃、环境光与罐壁反射'
+};
+
+let dust=[], t=0, release=0, capPulse=0, fanWind=0, fanWindLag=0, catTap=-10;
+let chimeTaps = [-10, -10, -10]; // 记录三个风铃的点击时间
+const jar={left:57,right:423,top:142,bottom:645,neckL:92,neckR:388,neckTop:117};
+
+// 音频相关上下文
+let audioCtx, ambientGain;
+
+function setup(){
+  const c=createCanvas(BASE_W,BASE_H);
+  c.parent('pixel-stage');
+  pixelDensity(1); noSmooth(); drawingContext.imageSmoothingEnabled=false;
+  initWorld(); sizeStage();
+  document.getElementById('interact-layer').addEventListener('pointerdown',handlePointer,{passive:false});
+}
+
+// ----------------- 音频系统 (纯代码合成音效，无需外部文件) -----------------
+function initAudio() {
+  if (audioCtx) {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return;
+  }
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  audioCtx = new AudioContext();
+  
+  // 背景微风音效 (白噪音 + 低通滤波)
+  const bufferSize = audioCtx.sampleRate * 2;
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = buffer;
+  noise.loop = true;
+  
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 300;
+  
+  // 模拟风的起伏
+  const lfo = audioCtx.createOscillator();
+  lfo.type = 'sine'; lfo.frequency.value = 0.15;
+  const lfoGain = audioCtx.createGain(); lfoGain.gain.value = 200;
+  lfo.connect(lfoGain); lfoGain.connect(filter.frequency);
+  lfo.start();
+  
+  ambientGain = audioCtx.createGain();
+  ambientGain.gain.value = 0.01; // 极低的底噪
+  
+  noise.connect(filter); filter.connect(ambientGain); ambientGain.connect(audioCtx.destination);
+  noise.start();
+}
+
+function playMeow() {
+  if(!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  osc.type = 'sine'; // 正弦波模拟轻柔的叫声
+  // 频率滑动模拟“喵~”
+  osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(850, audioCtx.currentTime + 0.15);
+  osc.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.45);
+  
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0, audioCtx.currentTime);
+  gain.gain.linearRampToValueAtTime(0.15, audioCtx.currentTime + 0.1);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+  
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.start(); osc.stop(audioCtx.currentTime + 0.5);
+}
+
+function playChime() {
+  if(!audioCtx) return;
+  const freqs = [1046.50, 1174.66, 1318.51, 1567.98, 1760.00]; // 泛音音阶
+  const f = freqs[Math.floor(Math.random()*freqs.length)];
+  
+  // 主音 + 泛音，模拟玻璃钟的清脆感
+  const osc1 = audioCtx.createOscillator(); osc1.type = 'sine'; osc1.frequency.value = f;
+  const osc2 = audioCtx.createOscillator(); osc2.type = 'sine'; osc2.frequency.value = f * 2.76;
+  
+  const gain1 = audioCtx.createGain();
+  gain1.gain.setValueAtTime(0, audioCtx.currentTime);
+  gain1.gain.linearRampToValueAtTime(0.12, audioCtx.currentTime + 0.02);
+  gain1.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 2.5);
+  
+  const gain2 = audioCtx.createGain();
+  gain2.gain.setValueAtTime(0, audioCtx.currentTime);
+  gain2.gain.linearRampToValueAtTime(0.06, audioCtx.currentTime + 0.01);
+  gain2.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1.0);
+  
+  osc1.connect(gain1); gain1.connect(audioCtx.destination);
+  osc2.connect(gain2); gain2.connect(audioCtx.destination);
+  osc1.start(); osc1.stop(audioCtx.currentTime + 2.5);
+  osc2.start(); osc2.stop(audioCtx.currentTime + 1.0);
+}
+
+function playWhoosh() {
+  if(!audioCtx) return;
+  const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < buffer.length; i++) data[i] = Math.random() * 2 - 1;
+  const noise = audioCtx.createBufferSource(); noise.buffer = buffer;
+  
+  const filter = audioCtx.createBiquadFilter(); filter.type = 'bandpass';
+  filter.frequency.setValueAtTime(400, audioCtx.currentTime);
+  filter.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.5);
+  
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0, audioCtx.currentTime);
+  gain.gain.linearRampToValueAtTime(0.15, audioCtx.currentTime + 0.1);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1);
+  
+  noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+  noise.start(); noise.stop(audioCtx.currentTime + 1);
+}
+// ----------------- 音频系统结束 -----------------
+
+function initWorld(){
+  for(let i=0;i<26;i++) dust.push({x:115+(i*47)%245,y:238+(i*79)%245,s:1+(i%3),p:i*.73});
+}
+
+function sizeStage(){
+  const s=document.getElementById('pixel-stage');
+  const scale=Math.min(windowWidth/BASE_W,windowHeight/BASE_H);
+  s.style.width=Math.floor(BASE_W*scale)+'px';
+  s.style.height=Math.floor(BASE_H*scale)+'px';
+}
+function windowResized(){sizeStage();}
+function stagePoint(e){
+  const r=document.getElementById('pixel-stage').getBoundingClientRect();
+  return {x:(e.clientX-r.left)*BASE_W/r.width,y:(e.clientY-r.top)*BASE_H/r.height};
+}
+function handlePointer(e){
+  e.preventDefault();
+  initAudio(); // 必须在用户交互时初始化音频
+
+  const p=stagePoint(e);
+  
+  // 1. 点了罐盖放风
+  if(p.y<155 && p.x>190 && p.x<290){ 
+      release=1; capPulse=1; 
+      playWhoosh();
+  }
+  // 2. 点了睡着的小猫
+  else if(p.x>315 && p.x<375 && p.y>532 && p.y<588){ 
+      catTap=t; 
+      playMeow();
+  } 
+  // 3. 互动风铃 (点击风铃所在区域)
+  else if (p.y > 220 && p.y < 290) {
+      for(let c=0; c<3; c++) {
+          const cx = 160 + 96 + c*39; // 每个风铃的中心x坐标
+          if (Math.abs(p.x - cx) < 20) {
+              chimeTaps[c] = t;
+              playChime();
+          }
+      }
+  }
+}
+
+function defineJarPath(ctx){
+  ctx.beginPath();
+  ctx.moveTo(jar.neckL,jar.neckTop);
+  ctx.lineTo(jar.neckR,jar.neckTop);
+  ctx.bezierCurveTo(jar.neckR+1,132,jar.right-11,144,jar.right-11,176);
+  ctx.lineTo(jar.right-11,jar.bottom-23);
+  ctx.bezierCurveTo(jar.right-11,jar.bottom-4,jar.right-27,jar.bottom,jar.right-47,jar.bottom);
+  ctx.lineTo(jar.left+47,jar.bottom);
+  ctx.bezierCurveTo(jar.left+27,jar.bottom,jar.left+11,jar.bottom-4,jar.left+11,jar.bottom-23);
+  ctx.lineTo(jar.left+11,176);
+  ctx.bezierCurveTo(jar.left+11,144,jar.neckL-1,132,jar.neckL,jar.neckTop);
+  ctx.closePath();
+}
+function withJarClip(fn){
+  const ctx=drawingContext; ctx.save(); defineJarPath(ctx); ctx.clip(); fn(ctx); ctx.restore();
+}
+function mix(hexA,hexB,a){
+  const n=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
+  const A=n(hexA),B=n(hexB); return color(Math.round(lerp(A[0],B[0],a)),Math.round(lerp(A[1],B[1],a)),Math.round(lerp(A[2],B[2],a)));
+}
+function steppedVertical(top,bottom,y0,y1,step=4){
+  noStroke();
+  for(let y=y0;y<y1;y+=step){ fill(mix(top,bottom,(y-y0)/(y1-y0))); rect(0,y,BASE_W,step); }
+}
+function drawBackground(){
+  steppedVertical('#eaffff','#72cfe4',0,BASE_H,4);
+  noStroke(); fill('#d8fbff'); rect(0,0,BASE_W,94);
+  fill(255,255,255,112); rect(0,92,BASE_W,5);
+  for(let x=0;x<BASE_W;x+=24){ fill(255,255,255,36); rect(x,105,12,2); }
+}
+function drawTable(){
+  noStroke();
+  fill(22,66,81,82); ellipse(240,654,318,25);
+  fill(232,248,255,64); ellipse(240,649,280,8);
+}
+
+function drawJarBack(){
+  const ctx=drawingContext; ctx.save(); defineJarPath(ctx); ctx.clip();
+  for(let y=136;y<650;y+=5){
+    const a=map(y,136,650,12,34); fill(112,216,240,a); rect(54,y,374,5);
+  }
+  fill(255,255,255,10); rect(78,180,20,416);
+  fill(16,112,160,14); rect(384,182,18,412);
+  ctx.restore();
+}
+
+function drawRoom(){
+  withJarClip(()=>{
+    const ctx=drawingContext; noStroke();
+    // 后墙
+    for(let y=210;y<472;y+=4){ fill(mix('#f4dda6','#e9c98f',(y-210)/262)); rect(122,y,263,4); }
+    for(let y=218;y<472;y+=9){ fill(255,255,236,(y%18===2)?12:6); rect(123,y,261,3); }
+    const rc=ctx.createLinearGradient(330,0,385,0);
+    rc.addColorStop(0,'rgba(120,78,44,0)'); rc.addColorStop(1,'rgba(120,78,44,.20)');
+    ctx.fillStyle=rc; ctx.fillRect(330,210,55,258);
+    // 左侧墙
+    const lw=ctx.createLinearGradient(95,0,124,0);
+    lw.addColorStop(0,'#deb982'); lw.addColorStop(.7,'#cfa96f'); lw.addColorStop(1,'#bb9160');
+    ctx.fillStyle=lw;
+    ctx.beginPath(); ctx.moveTo(95,226); ctx.lineTo(122,210); ctx.lineTo(122,468); ctx.lineTo(95,482); ctx.closePath(); ctx.fill();
+    const lwv=ctx.createLinearGradient(0,220,0,482);
+    lwv.addColorStop(0,'rgba(90,56,32,0)'); lwv.addColorStop(1,'rgba(90,56,32,.22)');
+    ctx.fillStyle=lwv;
+    ctx.beginPath(); ctx.moveTo(95,226); ctx.lineTo(122,210); ctx.lineTo(122,468); ctx.lineTo(95,482); ctx.closePath(); ctx.fill();
+    for(let y=234;y<466;y+=12){ fill(255,240,210,9); quad(96,y,121,y-1,121,y+1,96,y+2); }
+    // 墙角与踢脚线
+    const ao=ctx.createLinearGradient(108,0,130,0);
+    ao.addColorStop(0,'rgba(90,56,32,0)'); ao.addColorStop(1,'rgba(90,56,32,.26)');
+    ctx.fillStyle=ao; ctx.fillRect(108,214,16,252);
+    fill(255,244,214,44); rect(124,214,3,252);
+    const cove=ctx.createLinearGradient(0,454,0,472);
+    cove.addColorStop(0,'rgba(120,78,44,0)'); cove.addColorStop(1,'rgba(120,78,44,.22)');
+    ctx.fillStyle=cove; ctx.fillRect(122,454,263,18);
+    fill('#8a5a34'); quad(95,468,122,462,122,473,95,482);
+    fill('#b77c47'); rect(122,462,263,11);
+    fill(255,240,200,60); rect(122,462,263,2);
+    
+    // 环境泛光
+    const wash=ctx.createRadialGradient(250,330,40,250,330,240);
+    wash.addColorStop(0,'rgba(255,248,214,.30)'); wash.addColorStop(1,'rgba(255,248,214,0)');
+    ctx.fillStyle=wash; ctx.fillRect(95,205,314,280);
+    
+    drawWindow(); drawFloor(); drawBear(); drawFan(); 
+    drawSunRays(); // 新增：在灰尘之前绘制丁达尔效应
+    drawDust();
+  });
+}
+function drawBear(){
+  const bx=112,by=482; noStroke();
+  fill(60,36,20,52); ellipse(bx+3,by+2,40,9);
+  fill('#a5764a'); ellipse(bx,by-14,30,26); ellipse(bx-11,by-4,12,10); ellipse(bx+11,by-4,12,10);
+  ellipse(bx-13,by-16,9,13); ellipse(bx+13,by-16,9,13);
+  fill('#e6c9a0'); ellipse(bx,by-12,15,13); ellipse(bx-11,by-3,6,5); ellipse(bx+11,by-3,6,5);
+  fill('#b58554'); circle(bx,by-35,27);
+  fill('#a5764a'); circle(bx-9,by-45,10); circle(bx+9,by-45,10);
+  fill('#e6c9a0'); circle(bx-9,by-45,5); circle(bx+9,by-45,5);
+  ellipse(bx,by-31,13,10);
+  fill('#4a2e1a'); circle(bx,by-33,3.6); circle(bx-6,by-38,2.6); circle(bx+6,by-38,2.6);
+  stroke('#8a5f3a'); strokeWeight(1); line(bx,by-31,bx,by-28);
+}
+function drawWindow(){
+  const wx=160,wy=236,ww=181,wh=188;
+  noStroke(); fill('#67462d'); rect(wx-8,wy-8,ww+16,wh+16);
+  fill('#a96d3c'); rect(wx-4,wy-4,ww+8,wh+8);
+  const ctx=drawingContext;
+  const sky=ctx.createRadialGradient(wx+ww*.58,wy+wh*.42,16,wx+ww*.58,wy+wh*.42,170);
+  sky.addColorStop(0,'#fdfff0'); sky.addColorStop(.38,'#dcf6c8');
+  sky.addColorStop(.72,'#8fd9a4'); sky.addColorStop(1,'#5ec0a8');
+  ctx.fillStyle=sky; ctx.fillRect(wx,wy,ww,wh);
+  const sunX=wx+134,sunY=wy+58,pulse=Math.sin(t*.8)*1.5;
+  const glow=ctx.createRadialGradient(sunX,sunY,4,sunX,sunY,56);
+  glow.addColorStop(0,'rgba(255,252,220,.9)'); glow.addColorStop(.4,'rgba(255,244,180,.5)'); glow.addColorStop(1,'rgba(255,244,180,0)');
+  ctx.fillStyle=glow; ctx.fillRect(sunX-56,sunY-56,112,112);
+  noStroke(); fill('#fff9dc'); circle(sunX,sunY,26+pulse); fill('#ffffff'); circle(sunX-3,sunY-3,12);
+  fill(60,44,28,46); rect(wx,wy,ww,5); rect(wx,wy,5,wh);
+  fill(255,255,240,52); rect(wx,wy+wh-4,ww,4); rect(wx+ww-4,wy,4,wh);
+  fill('#f4ffff'); rect(wx+8,wy+11,7,159); fill('#d5fbff'); rect(wx+154,wy+9,10,164);
+  fill('#6e492f'); rect(wx+88,wy,5,wh); rect(wx,wy+103,ww,4);
+  fill('#ffffff'); rect(wx+5,wy+5,ww-10,4);
+  fill('#c08a52'); rect(wx-12,wy+wh+8,ww+24,7); fill('#e8b878'); rect(wx-12,wy+wh+8,ww+24,2);
+  fill(90,56,32,58); rect(wx-10,wy+wh+15,ww+20,4);
+  fill('#7a4f2c'); rect(wx-12,wy-13,ww+24,5); fill('#a96d3c'); rect(wx-12,wy-13,ww+24,2);
+  fill('#5a3820'); ellipse(wx-12,wy-10,7,7); ellipse(wx+ww+12,wy-10,7,7);
+  drawCurtain(wx,wy,ww,wh); drawChime(wx,wy,ww,wh);
+}
+function drawCurtain(wx,wy,ww,wh){
+  const wind=fanWindLag; const gust=wind*9+release*24;
+  const ctx=drawingContext; const top=wy-7;
+  const fl=i=>Math.sin(t*3.1+i*1.3)*(1.5+wind*1.5);
+  const path=()=>{
+    ctx.beginPath(); ctx.moveTo(wx+10,top); ctx.lineTo(wx+72,top);
+    ctx.bezierCurveTo(wx+78+gust*.35,wy+44,wx+92+gust,wy+92,wx+108+gust+fl(0),wy+132);
+    ctx.bezierCurveTo(wx+120+gust+fl(1),wy+162,wx+126+gust+fl(1),wy+176,wx+116+gust+fl(2),wy+193);
+    ctx.bezierCurveTo(wx+88+gust+fl(1),wy+181,wx+56+gust,wy+172,wx+34+gust,wy+144);
+    ctx.bezierCurveTo(wx+12,wy+108,wx+8,wy+40,wx+10,top); ctx.closePath();
+  };
+  ctx.save(); path(); ctx.fillStyle='rgba(255,250,224,.54)'; ctx.fill();
+  path(); ctx.clip();
+  const sheen=ctx.createLinearGradient(wx,wy,wx+100,wy+160);
+  sheen.addColorStop(0,'rgba(255,255,246,.34)'); sheen.addColorStop(1,'rgba(255,255,246,0)');
+  ctx.fillStyle=sheen; ctx.fillRect(wx,wy-10,ww,wh+20);
+  ctx.beginPath(); ctx.moveTo(wx+10,top); ctx.bezierCurveTo(wx+8,wy+40,wx+12,wy+108,wx+34+gust,wy+144);
+  ctx.strokeStyle='rgba(255,255,250,.6)'; ctx.lineWidth=2; ctx.stroke();
+  for(let i=0;i<4;i++){
+    const x0=wx+20+i*13; ctx.beginPath(); ctx.moveTo(x0,top+4);
+    ctx.bezierCurveTo(x0+5+gust*.3,wy+66,x0+14+gust*.5,wy+116,x0+22+gust*.6+fl(i),wy+168);
+    ctx.strokeStyle=i%2?'rgba(206,178,122,.30)':'rgba(255,255,248,.40)'; ctx.lineWidth=i%2?5:3; ctx.stroke();
+  }
+  ctx.beginPath(); ctx.moveTo(wx+34+gust,wy+144);
+  ctx.bezierCurveTo(wx+56+gust,wy+172,wx+88+gust+fl(1),wy+181,wx+116+gust+fl(2),wy+193);
+  ctx.strokeStyle='rgba(255,255,255,.7)'; ctx.lineWidth=3; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(wx+36+gust,wy+148);
+  ctx.bezierCurveTo(wx+58+gust,wy+175,wx+88+gust+fl(1),wy+184,wx+113+gust+fl(2),wy+195);
+  ctx.strokeStyle='rgba(214,192,140,.55)'; ctx.lineWidth=1.5; ctx.stroke();
+  for(let i=0;i<6;i++){
+    ctx.beginPath(); ctx.ellipse(wx+14+i*11,top+1,3,4.5,0,0,Math.PI*2);
+    ctx.strokeStyle='rgba(122,79,44,.9)'; ctx.lineWidth=2; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(wx+14+i*11,top+6); ctx.lineTo(wx+16+i*11,top+15);
+    ctx.strokeStyle='rgba(228,204,150,.5)'; ctx.lineWidth=2; ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawChime(wx,wy,ww,wh){
+  const wind=fanWindLag; const ctx=drawingContext;
+  for(let c=0;c<3;c++){
+    // 新增：响应用户点击互动的剧烈物理摇晃
+    const timeSinceTap = t - chimeTaps[c];
+    const tapSway = (timeSinceTap < 3) ? Math.sin(timeSinceTap*8) * Math.max(0, 1 - timeSinceTap/3) * 18 : 0;
+    const sway = Math.sin(t*1.3-.9+c*.7)*(2+wind*5) + release*8*Math.sin(t*6+c) + tapSway;
+    const strip = Math.sin(t*3.4+c*1.1)*(2+wind*4) + release*10*Math.sin(t*7.3+c) + tapSway*1.2;
+    
+    ctx.save(); ctx.translate(wx+96+c*39,wy-8); ctx.rotate(sway*.02);
+    stroke('#5a3820'); strokeWeight(2); line(0,0,0,12);
+    noStroke(); fill(255,252,238,225); quad(-4,18,4,18,5+strip,42,-3+strip,42);
+    fill(235,110,100,170); rect(-2,30,4,5);
+    fill('#d8e8f0'); circle(0,22,5);
+    fill(196,232,250,150); arc(0,19,26,24,PI,TWO_PI);
+    fill(196,232,250,130); quad(-14,18,14,18,15,22,-15,22);
+    noFill(); stroke(255,255,255,190); strokeWeight(1.5); arc(0,19,20,18,PI*1.1,PI*1.45);
+    noStroke(); fill(240,140,120,150); circle(5,12,4);
+    ctx.restore();
+  }
+}
+
+// 🌟 新增：丁达尔效应/透气耶苏光
+function drawSunRays() {
+  const ctx = drawingContext;
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  // 光线随着风扇吹过的空气微弱呼吸
+  const alpha = 0.08 + 0.03 * Math.sin(t * 1.2) + fanWind * 0.03; 
+  const ray = ctx.createLinearGradient(160, 236, 320, 580);
+  ray.addColorStop(0, `rgba(255, 255, 230, ${alpha})`);
+  ray.addColorStop(1, 'rgba(255, 240, 190, 0)');
+  
+  ctx.fillStyle = ray;
+  ctx.beginPath();
+  ctx.moveTo(160, 236); // 左窗角
+  ctx.lineTo(341, 236); // 右窗角
+  ctx.lineTo(415, 600); // 投影到地板右侧
+  ctx.lineTo(135, 600); // 投影到地板左侧
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawFloor(){
+  noStroke(); fill('#a9673e'); quad(95,479,385,479,409,606,72,606);
+  for(let y=488;y<607;y+=23){ fill('#e7a665'); quad(96,y,384,y,390,y+3,90,y+3); }
+  for(let x=108;x<380;x+=52){ fill('#77432f'); quad(x,480,x+4,480,x-17,605,x-21,605); }
+  for(let i=0;i<6;i++){
+    const f0=i/6,f1=(i+1)/6,y0=479+127*f0,y1=479+127*f1;
+    fill(70,40,24,Math.round(8+f0*42));
+    quad(95-23*f0,y0,385+24*f0,y0,385+24*f1,y1,95-23*f1,y1);
+  }
+  drawMat();
+  fill(255,226,143,115); quad(183,480,351,480,382,588,135,588);
+  fill(255,244,190,125); quad(196,486,333,486,354,565,157,565);
+  fill(120,72,40,42); quad(261,480,268,480,259,588,252,588);
+  fill(120,72,40,36); quad(157,536,368,536,368,542,157,542);
+  drawBowl(); drawCat();
+}
+function drawCat(){
+  const cx0=345,cy0=560; const p=t-catTap;
+  const w=p<0?0:p<.35?p/.35:p<2.6?1:p<4?Math.max(0,1-(p-2.6)/1.4):0;
+  const s=0, br=Math.sin(t*.9)*1.1*(1-w);
+  noStroke(); fill(60,36,20,48); ellipse(cx0,cy0+9,44+s*10,10);
+  noFill(); stroke('#d98e4a'); strokeWeight(7);
+  bezier(cx0+16,cy0-2,cx0+23,cy0+10-s*9,cx0+7,cy0+15-s*8,cx0-9,cy0+10-s*2);
+  noStroke(); fill('#e59a55'); ellipse(cx0+s*3,cy0-br*.5+s*2,36+s*12,21-br-s*4);
+  fill('#c97f3e'); rect(cx0+4,cy0-9,3,5); rect(cx0+11,cy0-7,3,5); rect(cx0-2,cy0-10,3,4);
+  const hx=cx0-13-5*s, hy=cy0-5-4*w-7*s;
+  fill('#e59a55'); circle(hx,hy,16);
+  triangle(hx-7,hy-6,hx-4,hy-13-w*2,hx+1,hy-7);
+  triangle(hx+4,hy-8,hx+8,hy-12-w*2,hx+10,hy-5);
+  fill('#f2b57c'); triangle(hx-5,hy-7,hx-3.5,hy-10.5-w*2,hx-1,hy-7);
+  if(w<.5){
+    stroke('#7a4a22'); strokeWeight(1.2);
+    line(hx-5,hy+1,hx-2,hy+2); line(hx+2,hy+2,hx+5,hy+1); noStroke();
+  } else {
+    fill('#4a2e1a'); circle(hx-3.5,hy+1,4.4); circle(hx+3.5,hy+1,4.4);
+    fill('#ffffff'); circle(hx-4.3,hy+.2,1.4); circle(hx+2.7,hy+.2,1.4);
+  }
+  fill('#d97f6a'); ellipse(hx-3,hy+4,3,2);
+}
+function drawMat(){
+  noStroke();
+  for(let i=0;i<8;i++){
+    const f0=i/8,f1=(i+1)/8; fill(i%2?'#c2a05f':'#d3b476');
+    quad(153-21*f0,511+78*f0,342+22*f0,511+78*f0,342+22*f1,511+78*f1,153-21*f1,511+78*f1);
+  }
+  for(let i=1;i<8;i++){
+    const f=i/8; fill(122,90,46,120);
+    quad(153-21*f,511+78*f,342+22*f,511+78*f,342+22*f,511+78*f+1.5,153-21*f,511+78*f+1.5);
+  }
+  fill(138,98,50,170); quad(196,511,199,511,187,589,184,589); quad(290,511,293,511,303,589,300,589);
+  fill('#9c7640'); quad(153,511,342,511,344,517,151,517);
+  fill('#7d5c32'); quad(132,589,364,589,364,593,132,593);
+}
+function drawBowl(){
+  const bx=282,by=556; noStroke();
+  fill(60,36,20,66); ellipse(bx,by+19,64,12);
+  fill(168,214,222,120); ellipse(bx,by+6,54,26);
+  const bob=Math.sin(t*.9)*1.2, bob2=Math.sin(t*.9+1.8)*1.2, bob3=Math.sin(t*.9+3.4)*1.1;
+  fill('#b93326'); circle(bx-1,by-2+bob3,12); fill('#a02c22'); rect(bx-2,by-1+bob3,2,2);
+  stroke('#4c6b35'); strokeWeight(1.5); line(bx-1,by-8+bob3,bx+1,by-12+bob3); noStroke();
+  fill('#c93b2f'); circle(bx-12,by+2+bob,15); fill('#e0543f'); circle(bx-14,by+bob,6);
+  fill('#a02c22'); rect(bx-10,by+4+bob,2,2); rect(bx-15,by+5+bob,2,2);
+  fill('#d84336'); circle(bx+10,by+4+bob2,13); fill('#a02c22'); rect(bx+9,by+6+bob2,2,2);
+  stroke('#4c6b35'); strokeWeight(1.5); line(bx-12,by-5+bob,bx-16,by-11+bob);
+  noStroke(); fill('#5d8440'); ellipse(bx-18,by-12+bob,7,4);
+  fill(168,214,222,110); arc(bx,by+3,54,24,0,PI);
+  noFill(); stroke(214,240,246,210); strokeWeight(2); ellipse(bx,by,58,22);
+  stroke(255,255,255,170); strokeWeight(1.5); ellipse(bx,by+7,56,30);
+  stroke(255,255,255,220); strokeWeight(2); arc(bx,by+2,56,30,PI*1.15,PI*1.5);
+  noStroke(); fill(255,246,190,110); ellipse(bx+3,by+9,26,8);
+}
+function drawFan(){
+  const cx=146,cy=494; const aim=.5+.5*Math.sin(t*.45);
+  const hw=32-aim*8, hx=cx+aim*9; noStroke();
+  fill('#174c59'); quad(cx-8,cy+26,cx+8,cy+26,cx+15,cy+78,cx-15,cy+78);
+  fill('#0d3a46'); ellipse(cx,cy+80,58,12); fill('#2a6b7c'); ellipse(cx,cy+78,52,9);
+  fill('#40b8e0'); rect(cx-3,cy+30,6,44);
+  fill('#e8f8ff'); ellipse(hx,cy,hw*2,64); fill('#d0f0ff'); ellipse(hx,cy,hw*2-6,58);
+  const ctx=drawingContext; ctx.save(); ctx.beginPath(); ctx.ellipse(hx,cy,hw-5,27,0,0,Math.PI*2); ctx.clip();
+  const spin=t*(2.6+release*6)*(.7+.6*fanWind);
+  fill(64,160,190,60); ellipse(hx,cy,(hw-5)*2,44);
+  fill(64,160,190,120);
+  for(let i=0;i<3;i++){
+    const a=spin+i*TWO_PI/3; push(); translate(hx,cy); rotate(a); ellipse(13*(hw/32),0,30*(hw/32),13); pop();
+  }
+  ctx.restore();
+  noFill(); stroke(16,80,96,200); strokeWeight(2); ellipse(hx,cy,hw*2-6,58); strokeWeight(1);
+  for(let r=9;r<29;r+=7){ stroke(16,80,96,120); ellipse(hx,cy,r*2*(hw/32)-2,r*2); }
+  for(let i=0;i<12;i++){
+    const a=i*PI/6; stroke(16,80,96,90);
+    line(hx+Math.cos(a)*8*(hw/32),cy+Math.sin(a)*8,hx+Math.cos(a)*28*(hw/32),cy+Math.sin(a)*28);
+  }
+  noStroke(); fill('#083040'); ellipse(hx,cy,15*(hw/32)+4,15); fill('#e8f8ff'); ellipse(hx,cy,7,7);
+  const blow=Math.max(0,(aim-.3)/.7);
+  if(blow>.05){
+    stroke(160,240,255,Math.round((80+90*fanWind)*blow)); strokeWeight(2);
+    line(hx+hw-2,cy-16,hx+hw+8+Math.round(14*fanWind),cy-32-Math.round(10*fanWind));
+    stroke(160,240,255,Math.round((50+60*fanWind)*blow));
+    line(hx+hw-2,cy-4,hx+hw+14+Math.round(10*fanWind),cy-16-Math.round(8*fanWind));
+  }
+}
+function drawDust(){
+  noStroke();
+  for(const d of dust){
+    const rise=((t*.22+d.p)%1)*12;
+    const x = d.x+fanWind*7;
+    const y = d.y-rise;
+    
+    // 🌟 新增：微尘飘入太阳光带时被照亮发光，像发光的碎金子
+    const inRay = (x > 140 && x < 380 && y > 230 && y < 580);
+    const extraGlow = inRay ? 70 : 0;
+    const a = 38 + Math.round(35*Math.sin(t+d.p)) + extraGlow;
+    
+    fill(255, 249, 199, a); 
+    circle(x, y, d.s * 1.5); // 改成柔软的圆点
+  }
+}
+
+function drawLid(){
+  noStroke(); fill('#6797a4'); rect(jar.neckL-5,94,jar.neckR-jar.neckL+10,27);
+  fill('#e8f8ff'); rect(jar.neckL-1,96,jar.neckR-jar.neckL+2,4);
+  fill('#2d7184'); rect(jar.neckL-3,121,jar.neckR-jar.neckL+6,8);
+  fill('#105060'); rect(jar.neckL-3,129,jar.neckR-jar.neckL+6,5);
+  for(let x=jar.neckL+15;x<jar.neckR-8;x+=24){ fill('#a0e8f8'); rect(x,103,8,12); }
+  const glow=capPulse*85;
+  fill(232,248,255,185+glow); rect(218,128,44,10);
+  fill('#40b8e0'); rect(222,137,36,7); fill('#083040'); rect(228,144,24,5);
+}
+function drawGlassSurface(){
+  const ctx=drawingContext; ctx.save();
+  defineJarPath(ctx);
+  ctx.lineWidth=5; ctx.strokeStyle='rgba(18,84,116,.30)'; ctx.stroke();
+  ctx.lineWidth=1.5; ctx.strokeStyle='rgba(255,255,255,.82)'; ctx.stroke();
+  ctx.save(); defineJarPath(ctx); ctx.clip();
+  ctx.globalCompositeOperation='screen';
+  const glow=ctx.createRadialGradient(148,556,8,148,556,195);
+  glow.addColorStop(0,'rgba(255,255,255,.16)'); glow.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.fillStyle=glow; ctx.fillRect(0,330,340,320);
+  ctx.beginPath(); ctx.moveTo(97,168); ctx.bezierCurveTo(74,280,79,540,113,612);
+  ctx.strokeStyle='rgba(255,255,255,.30)'; ctx.lineWidth=10; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(104,182); ctx.bezierCurveTo(87,292,91,516,119,598);
+  ctx.strokeStyle='rgba(255,255,255,.52)'; ctx.lineWidth=3; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(388,182); ctx.bezierCurveTo(405,272,401,420,385,498);
+  ctx.strokeStyle='rgba(150,224,248,.26)'; ctx.lineWidth=5; ctx.stroke();
+  ctx.fillStyle='rgba(255,255,255,.6)';
+  ctx.beginPath(); ctx.ellipse(122,164,7,3,-.4,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(358,162,5,2,.4,0,Math.PI*2); ctx.fill();
+  ctx.globalCompositeOperation='source-over'; ctx.restore();
+  noFill(); stroke(255,255,255,215); strokeWeight(2); line(jar.neckL+4,137,jar.neckR-4,137);
+  stroke(160,226,248,110); strokeWeight(5); line(jar.left+45,639,jar.right-45,639);
+  stroke('#ffffff'); strokeWeight(1.5); line(jar.left+62,635,jar.right-62,635);
+  noStroke(); fill(232,248,255,20); rect(107,602,266,28);
+  ctx.restore();
+}
+function drawHint(){
+  const a=85+Math.round(65*(.5+.5*Math.sin(t*1.7)));
+  fill(232,248,255,a); rect(235,150,10,2);
+}
+function draw(){
+  t+=deltaTime*.001;
+  release*=.985; capPulse*=.94;
+  fanWind=.15+.85*(.5+.5*Math.sin(t*.45));
+  fanWindLag+=(fanWind-fanWindLag)*Math.min(1,deltaTime*.0016);
+  
+  // 音量动态调节：随着风扇转向或你打开盖子的“放风”调整背景白噪音
+  if (ambientGain && audioCtx) {
+    const targetVolume = 0.005 + fanWind * 0.015 + release * 0.05;
+    ambientGain.gain.setTargetAtTime(targetVolume, audioCtx.currentTime, 0.1);
+  }
+
+  drawBackground(); drawTable(); drawJarBack(); drawRoom(); drawLid(); drawGlassSurface(); drawHint();
+}
+</script>
+</body>
+</html>
