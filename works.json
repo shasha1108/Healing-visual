@@ -183,6 +183,41 @@
   },
   "works": [
     {
+      "slug": "sealed-summer-jar",
+      "title_en": "Sealed Summer Jar",
+      "title_zh": "封存的四点钟",
+      "tagline": "一只玻璃罐，把一个不会结束的夏日下午四点钟封存了起来。",
+      "tech": [
+        "p5.js",
+        "Canvas 2D",
+        "Web Audio API"
+      ],
+      "render": "Canvas2D (p5.js)",
+      "has_audio": true,
+      "has_touch": true,
+      "particle_count": "N/A",
+      "dependencies": 1,
+      "healing_domain": "meditation",
+      "keywords": [
+        "p5.js",
+        "canvas 2d",
+        "web audio api",
+        "touch interaction"
+      ],
+      "use_cases": [
+        "p5.js",
+        "canvas 2d",
+        "web audio api",
+        "touch interaction"
+      ],
+      "files": [
+        "sealed-summer-jar.html",
+        "sealed-summer-jar.md",
+        "sealed-summer-jar_1.gif"
+      ],
+      "date": "2026-08-03"
+    },
+    {
       "slug": "the-old-signal",
       "title_en": "The Old Signal",
       "title_zh": "旧信号",
@@ -1208,41 +1243,6 @@
         "layered-mountains.jpg"
       ],
       "date": "2026-06-11"
-    },
-    {
-      "slug": "sealed-summer-jar",
-      "title_en": "Sealed Summer Jar",
-      "title_zh": "封存的四点钟",
-      "tagline": "一只玻璃罐，把一个不会结束的夏日下午四点钟封存了起来。",
-      "tech": [
-        "p5.js",
-        "Canvas 2D",
-        "Web Audio API"
-      ],
-      "render": "Canvas2D (p5.js)",
-      "has_audio": true,
-      "has_touch": true,
-      "particle_count": "N/A",
-      "dependencies": 1,
-      "healing_domain": "meditation",
-      "keywords": [
-        "p5.js",
-        "canvas 2d",
-        "web audio api",
-        "touch interaction"
-      ],
-      "use_cases": [
-        "p5.js",
-        "canvas 2d",
-        "web audio api",
-        "touch interaction"
-      ],
-      "files": [
-        "sealed-summer-jar.html",
-        "sealed-summer-jar.md",
-        "sealed-summer-jar_1.gif"
-      ],
-      "date": "2026-08-03"
     }
   ]
 }
