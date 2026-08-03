@@ -33,6 +33,18 @@
 
 直接用浏览器打开 `moon-cat.html` 即可运行——单文件 H5，仅依赖 1 个 CDN（p5）。
 
+### 🎬 演示参数 · Demo Parameters
+
+`等月亮 / Waiting for the Moon` 支持以下 URL 参数。多个参数可以用 `&` 连接。
+
+| 参数 | 示例 | 作用 |
+| --- | --- | --- |
+| `shot=1` | [`?shot=1`](https://shasha1108.github.io/healing-visual-lab/moon-cat/moon-cat.html?shot=1) | 开启 30 秒可复现录制时间线：流星 ×5、夜鸟 ×3、雨 ×2、猫的生命事件 ×6 |
+| `fast=1` | [`?fast=1`](https://shasha1108.github.io/healing-visual-lab/moon-cat/moon-cat.html?fast=1) | 时间流速 ×3，约 20 秒可录到猫入睡的结尾 |
+| `days=N` | [`?days=2`](https://shasha1108.github.io/healing-visual-lab/moon-cat/moon-cat.html?days=2) | 月相前进 `N` 步，用于演示重访变化，不写回存储 |
+
+例如，使用 `?shot=1&fast=1` 可以同时开启录制时间线和加速播放。
+
 ## 📂 文件说明
 
 | 文件 | 说明 |
