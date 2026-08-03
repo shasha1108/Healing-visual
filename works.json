@@ -20,8 +20,8 @@
       "layered-mountains"
     ],
     "canvas_2d": [
-      "moon-cat",
       "sealed-summer-jar",
+      "moon-cat",
       "the-old-signal",
       "aquarium-2003",
       "first-light",
@@ -62,8 +62,8 @@
       "layered-mountains"
     ],
     "web_audio": [
-      "moon-cat",
       "sealed-summer-jar",
+      "moon-cat",
       "the-old-signal",
       "tide-keeping-station",
       "aquarium-2003",
@@ -126,8 +126,8 @@
       "inkmeditation"
     ],
     "touch_interaction": [
-      "moon-cat",
       "sealed-summer-jar",
+      "moon-cat",
       "the-old-signal",
       "tide-keeping-station",
       "aquarium-2003",
@@ -160,8 +160,8 @@
       "silent-translator"
     ],
     "p5js": [
-      "moon-cat",
       "sealed-summer-jar",
+      "moon-cat",
       "the-old-signal",
       "aquarium-2003",
       "first-light",
@@ -218,6 +218,44 @@
         "sealed-summer-jar.html",
         "sealed-summer-jar.md",
         "sealed-summer-jar_1.gif"
+      ],
+      "date": "2026-08-03"
+    },
+    {
+      "slug": "moon-cat",
+      "title_en": "Waiting for the Moon",
+      "title_zh": "等月亮",
+      "tagline": "A quiet moonlit window where a cat slowly falls asleep.",
+      "tech": [
+        "p5.js",
+        "Canvas 2D",
+        "Web Audio API",
+        "localStorage"
+      ],
+      "render": "Canvas2D (p5.js)",
+      "has_audio": true,
+      "has_touch": true,
+      "particle_count": "N/A",
+      "dependencies": 1,
+      "healing_domain": "meditation",
+      "keywords": [
+        "p5.js",
+        "canvas 2d",
+        "web audio api",
+        "touch interaction",
+        "localstorage persistence"
+      ],
+      "use_cases": [
+        "p5.js",
+        "canvas 2d",
+        "web audio api",
+        "touch interaction",
+        "localstorage persistence"
+      ],
+      "files": [
+        "moon-cat.html",
+        "moon-cat.md",
+        "moon-cat_1.gif"
       ],
       "date": "2026-08-03"
     },
@@ -1247,44 +1285,6 @@
         "layered-mountains.jpg"
       ],
       "date": "2026-06-11"
-    },
-    {
-      "slug": "moon-cat",
-      "title_en": "Waiting for the Moon",
-      "title_zh": "等月亮",
-      "tagline": "A quiet moonlit window where a cat slowly falls asleep.",
-      "tech": [
-        "p5.js",
-        "Canvas 2D",
-        "Web Audio API",
-        "localStorage"
-      ],
-      "render": "Canvas2D (p5.js)",
-      "has_audio": true,
-      "has_touch": true,
-      "particle_count": "N/A",
-      "dependencies": 1,
-      "healing_domain": "meditation",
-      "keywords": [
-        "p5.js",
-        "canvas 2d",
-        "web audio api",
-        "touch interaction",
-        "localstorage persistence"
-      ],
-      "use_cases": [
-        "p5.js",
-        "canvas 2d",
-        "web audio api",
-        "touch interaction",
-        "localstorage persistence"
-      ],
-      "files": [
-        "moon-cat.html",
-        "moon-cat.md",
-        "moon-cat_1.gif"
-      ],
-      "date": "2026-08-03"
     }
   ]
 }
