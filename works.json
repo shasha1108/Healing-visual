@@ -2,7 +2,7 @@
   "repo": "shasha1108/healing-visual-lab",
   "url": "https://github.com/shasha1108/healing-visual-lab",
   "pages": "https://shasha1108.github.io/healing-visual-lab/",
-  "total": 35,
+  "total": 36,
   "updated": "2026-08-03",
   "description": "Interactive healing H5 experiments — Three.js WebGL, Canvas 2D, GLSL shaders, Web Audio, GSAP, creative coding for emotional design. Most works load Three.js r128 via CDN; silent-translator is the only zero-dependency work.",
   "tech_landscape": {
@@ -20,6 +20,7 @@
       "layered-mountains"
     ],
     "canvas_2d": [
+      "moon-cat",
       "sealed-summer-jar",
       "the-old-signal",
       "aquarium-2003",
@@ -61,6 +62,7 @@
       "layered-mountains"
     ],
     "web_audio": [
+      "moon-cat",
       "sealed-summer-jar",
       "the-old-signal",
       "tide-keeping-station",
@@ -124,6 +126,7 @@
       "inkmeditation"
     ],
     "touch_interaction": [
+      "moon-cat",
       "sealed-summer-jar",
       "the-old-signal",
       "tide-keeping-station",
@@ -157,6 +160,7 @@
       "silent-translator"
     ],
     "p5js": [
+      "moon-cat",
       "sealed-summer-jar",
       "the-old-signal",
       "aquarium-2003",
@@ -1243,6 +1247,44 @@
         "layered-mountains.jpg"
       ],
       "date": "2026-06-11"
+    },
+    {
+      "slug": "moon-cat",
+      "title_en": "Waiting for the Moon",
+      "title_zh": "等月亮",
+      "tagline": "A quiet moonlit window where a cat slowly falls asleep.",
+      "tech": [
+        "p5.js",
+        "Canvas 2D",
+        "Web Audio API",
+        "localStorage"
+      ],
+      "render": "Canvas2D (p5.js)",
+      "has_audio": true,
+      "has_touch": true,
+      "particle_count": "N/A",
+      "dependencies": 1,
+      "healing_domain": "meditation",
+      "keywords": [
+        "p5.js",
+        "canvas 2d",
+        "web audio api",
+        "touch interaction",
+        "localstorage persistence"
+      ],
+      "use_cases": [
+        "p5.js",
+        "canvas 2d",
+        "web audio api",
+        "touch interaction",
+        "localstorage persistence"
+      ],
+      "files": [
+        "moon-cat.html",
+        "moon-cat.md",
+        "moon-cat_1.gif"
+      ],
+      "date": "2026-08-03"
     }
   ]
 }

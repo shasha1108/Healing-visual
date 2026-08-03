@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<!--
+  Title: Waiting for the Moon · 等月亮
+  Concept: 呼吸感的环境剧场——猫自主活着，不为任何人表演；按住=无意陪伴，光影微暖："我知道你在"
+  Summary: 猫每 ~10s 自主微调（甩尾/动耳/调姿/半睁眼）；玻璃挂雨、夜鸟、流星低频路过；
+  Tech: p5.js, Canvas 2D, Web Audio API, localStorage
+  Keywords: p5.js, canvas 2d, web audio api, touch interaction, localstorage persistence
+  Features: A pixel-art window scene rendered with p5.js, where a breathing orange cat, moonlight, stars, rain, birds, and meteors evolve over time. Web Audio synthesis adds a soft purr and looping lo-fi pad during a press-and-hold interaction.
+  Render: Canvas2D (p5.js)
+  Audio: yes
+  Touch: yes
+  Particles: N/A
+  Standalone: yes, single HTML file, 1 CDN dependencies
+  Repo: https://github.com/shasha1108/healing-visual-lab
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>等月亮</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+<script>window.p5||document.write('<script src="https://cdn.bootcdn.net/ajax/libs/p5.js/1.9.0/p5.min.js"><\/script>');</script>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100vw;height:100vh;overflow:hidden;background:#04070d;user-select:none;-webkit-user-select:none;touch-action:none;overscroll-behavior:none}
+#canvas-container{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;height:min(100vh,177.78vw)!important;width:auto!important;cursor:default}
+</style>
+</head>
+<body><div id="canvas-container"></div>
+<script>
+'use strict';
+/* ================= 演示参数 ================= */
+const QUERY = (typeof location !== 'undefined' && location.search)
+  ? new URLSearchParams(location.search) : new URLSearchParams('');
+const SHOT = QUERY.get('shot') === '1';
+const FAST = QUERY.get('fast') === '1';
+const DEMO_DAYS = parseInt(QUERY.get('days') || '', 10);
+const TIME_SCALE = FAST ? 3 : 1;
+
+/* ================= 色板 ================= */
+const PALETTE = {
+  name: '窗台月色', role: '夜景/陪伴物',
+  skyTop:'#0e2a4a', skyBot:'#1f5c82',        // 提亮青蓝夜空（用户 2026-08-03 确认）
+  skyTopDeep:'#061222', skyBotDeep:'#0f2c40', // 一分钟结尾：沉入更深的蓝（落点必须暗于起色）
+  starDim:'#b8ccdd', starBright:'#ffffff',
+  moon:'#ffffff', moonShade:'#d8eef2',        // 乳白带青辉
+  wall0:'#0d1828', wall1:'#050a12',
+  frame:'#2a405a', frameHi:'#4a6a8c', frameDk:'#162434',
+  sillTop:'#54718e', sillHi:'#7e9cb8', sillFace:'#2e4a66', sillDk:'#1a2c40',
+  catO:'#f28c38', catOd:'#c96a1e', catRim:'#ffd9a0',   // 饱和暖橘 + 金黄月光轮廓
+  catW:'#fdf4e2', catWs:'#e6d6ba', eye:'#241812', nose:'#d67f5c',
+  pot:'#a06844', potRim:'#bd8056', potDk:'#7d4e32',
+  leaf:'#5c9464', leafHi:'#8cc47f',
+  pulse:'#ffd88a', bird:'#8fa8c0'
+};
+const C = {};
+
+/* ================= 几何权威（一切坐标由此派生） ================= */
+const CW = 180, CH = 320;                    // 9:16 竖屏，服务手机录屏
+const GEO = {
+  openX0: 22, openX1: 158, openY0: 18, openY1: 230,  // 窗洞（天空可见区）
+  frameW: 6,
+  mullX0: 88, mullX1: 92, mullY0: 114, mullY1: 118,  // 窗棂
+  sillX0: 10, sillX1: 170, sillY: 236, sillH: 14,    // 窗台
+  moonCx: 128, moonCy: 62, moonR: 11,
+  catX: 58                                           // 猫 sprite 原点（尾根左缘），base = 窗台面
+};
+GEO.catBaseY = GEO.sillY;
+
+/* ================= 确定性工具 ================= */
+function hf(n){ const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); }
+function mulberry32(a){ return function(){ a|=0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function smoothstep(t, a, b){ const x = Math.min(1, Math.max(0, (t - a) / (b - a))); return x * x * (3 - 2 * x); }
+function ramp(t, a, b){ return Math.min(1, Math.max(0, (t - a) / (b - a))); }
+function easeOut(x){ return 1 - (1 - x) * (1 - x); }
+
+/* ================= 世界状态 ================= */
+let t = 0;                    // 场景时间（秒，受 TIME_SCALE 缩放）
+let state = 'curled';         // curled | sleeping  （猫不为任何人表演，无 petted 态）
+let stars = [];
+let schedule = [];
+let tailAnimT = -1, earAnimT = -1, halfEyeT = -1, adjustT = -1, sleepEarT = -1;
+let bird = null, meteor = null;
+let drops = [];               // 玻璃上的雨水（偶尔几滴滑落）
+let holding = false, holdK = 0;   // 按住=无意陪伴：光影微暖，不触发猫的回应
+let moonPhase = 0;            // 0 满 1 亏凸 2 半月 3 残月 4 一钩
+let skyK = 0;                 // 天色加深因子
+
+/* ================= 月相（重访的低概率小变化） ================= */
+function initMoonPhase(){
+  const PHASES = 5;
+  if (SHOT && !(DEMO_DAYS > 0)) { moonPhase = 0; return; }   // 录制时间线：固定一轮满月，可复现
+  try {
+    const stored = parseInt(localStorage.getItem('mooncat_phase') || '0', 10) || 0;
+    if (DEMO_DAYS > 0) { moonPhase = ((stored + DEMO_DAYS) % PHASES + PHASES) % PHASES; return; } // 演示不写回
+    moonPhase = stored;
+    if (Math.random() < 0.25) moonPhase = (stored + 1) % PHASES;   // 低概率，无签到
+    localStorage.setItem('mooncat_phase', String(moonPhase));
+  } catch(e) { moonPhase = DEMO_DAYS > 0 ? DEMO_DAYS % PHASES : 0; }
+}
+
+/* ================= 星空（确定性 hash + 大气消光，night-sky recipe） ================= */
+function initStars(){
+  stars = [];
+  const H = GEO.openY1 - GEO.openY0;
+  for (let i = 0; i < 160; i++) {
+    const x = GEO.openX0 + 2 + hf(i * 12.9898) * (GEO.openX1 - GEO.openX0 - 4);
+    const y = GEO.openY0 + 2 + hf(i * 37.373 + 7) * (H - 4);
+    const hRatio = 1 - (y - GEO.openY0) / H;             // 1=天顶 0=地平线
+    const extinction = Math.pow(hRatio, 3.5);
+    if (hf(i * 73.37) > extinction * 0.92) continue;
+    const b = extinction * (0.5 + hf(i + 13.37) * 0.5);
+    const size = hf(i + 137) > 0.94 ? 2 : 1;
+    stars.push({ x: Math.round(x), y: Math.round(y), b, size });
+  }
+}
+
+/* ================= 事件时间表（猫自主生命节律 ~10s 一拍 + 环境呼吸：雨/鸟/流星） ================= */
+function initSchedule(){
+  if (SHOT) {   // 30s 录制时间线：流星×5、夜鸟×3、雨×2、猫生命事件×6，每拍必到、可复现
+    schedule = [
+      { t: 2.5,  type: 'ear' },
+      { t: 4.0,  type: 'meteor' },
+      { t: 5.0,  type: 'rain' },
+      { t: 6.5,  type: 'bird' },
+      { t: 8.0,  type: 'tail' },
+      { t: 10.5, type: 'meteor' },
+      { t: 12.0, type: 'halfEye' },
+      { t: 14.0, type: 'bird' },
+      { t: 16.0, type: 'meteor' },
+      { t: 17.5, type: 'adjust' },
+      { t: 19.5, type: 'rain' },
+      { t: 21.0, type: 'meteor' },
+      { t: 23.5, type: 'bird' },
+      { t: 25.5, type: 'tail' },
+      { t: 27.5, type: 'meteor' },
+      { t: 29.0, type: 'ear' }
+    ];
+    return;
+  }
+  const R = mulberry32(Math.floor(Math.random() * 1e9));
+  schedule = [];
+  // 猫自主节律：约 10s 一拍，类型轮换（尾/耳/调姿/半睁眼），起始相位每次打开不同
+  const cycle = ['tail', 'ear', 'adjust', 'halfEye'];
+  const off = Math.floor(R() * 4);
+  let et = 5 + R() * 2;
+  for (let i = 0; i < 5 && et < 52; i++) {
+    schedule.push({ t: et, type: cycle[(off + i) % 4] });
+    et += 9 + R() * 4;
+  }
+  // 环境呼吸：鸟、流星、玻璃挂雨都允许整分钟不发生
+  if (R() < 0.35) schedule.push({ t: 18 + R() * 32, type: 'bird' });
+  if (R() < 0.25) schedule.push({ t: 12 + R() * 38, type: 'meteor' });
+  for (let rt = 8 + R() * 6; rt < 52; rt += 12 + R() * 8) {
+    if (R() < 0.55) schedule.push({ t: rt, type: 'rain' });
+  }
+  schedule.sort((a, b) => a.t - b.t);
+}
+
+/* ================= p5 生命周期 ================= */
+function setup(){
+  const cvs = createCanvas(CW, CH);
+  cvs.parent('canvas-container');
+  noSmooth();
+  pixelDensity(1);
+  drawingContext.imageSmoothingEnabled = false;
+  frameRate(30);
+  for (const k in PALETTE) if (typeof PALETTE[k] === 'string' && PALETTE[k][0] === '#') C[k] = color(PALETTE[k]);
+  C.O = C.catO; C.Od = C.catOd; C.R = C.catRim; C.W = C.catW; C.Ws = C.catWs;  // 猫 sprite 行色键别名
+  initMoonPhase();
+  initStars();
+  initSchedule();
+
+  // 按住=无意陪伴（位置无关，不命中测试——世界不索取，也不乱应）
+  if (typeof window !== 'undefined') {
+    window.addEventListener('pointerdown', onHoldStart);
+    window.addEventListener('pointerup', onHoldEnd);
+    window.addEventListener('pointercancel', onHoldEnd);
+    window.addEventListener('blur', onHoldEnd);
+  }
+}
+
+function onHoldStart(){
+  if (holding) return;
+  holding = true;
+  AudioSys.unlock();            // 首次触摸静默解锁音频（无痕全屏，无提示文字）
+  AudioSys.purr(30);            // 按住期间呼噜陪伴，松手即止
+  if (state === 'sleeping' && sleepEarT < 0) sleepEarT = t;   // 猫睡了：只动一下耳朵，不叫醒它
+}
+function onHoldEnd(){
+  if (!holding) return;
+  holding = false;
+  AudioSys.stopPurr();
+}
+
+/* ================= 声音（Web Audio 纯合成，首次点击解锁；呼噜 + Lofi Pad，无外部音频文件） ================= */
+const AudioSys = {
+  ctx: null, master: null, musicBus: null, unlocked: false,
+  chordIdx: 0, nextBar: 0, musicTimer: null, purrCtl: null,
+  CHORDS: [   // E♭ 调夜间和弦循环：Ebmaj7 → Cm7 → Fm7 → Bb7
+    { bass: 155.56, pad: [311.13, 392.00, 466.16] },
+    { bass: 130.81, pad: [261.63, 311.13, 392.00] },
+    { bass: 174.61, pad: [349.23, 415.30, 523.25] },
+    { bass: 116.54, pad: [293.66, 349.23, 415.30] }
+  ],
+  BAR: 4.2,
+
+  unlock(){
+    if (this.unlocked) return;
+    const AC = (typeof AudioContext !== 'undefined') ? AudioContext
+             : (typeof webkitAudioContext !== 'undefined') ? webkitAudioContext : null;
+    if (!AC) return;
+    try {
+      this.ctx = new AC();
+      this.master = this.ctx.createGain(); this.master.gain.value = 0.9;
+      this.master.connect(this.ctx.destination);
+      this.musicBus = this.ctx.createGain(); this.musicBus.gain.value = 1;
+      const lp = this.ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 950;
+      this.musicBus.connect(lp); lp.connect(this.master);
+      this.unlocked = true;
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+      this.nextBar = this.ctx.currentTime + 0.1;
+      this.musicTimer = setInterval(() => this.scheduleAhead(), 400);
+    } catch(e) { /* 无音频环境静默降级 */ }
+  },
+
+  scheduleAhead(){
+    if (!this.unlocked) return;
+    while (this.nextBar < this.ctx.currentTime + 1.2) {
+      this.scheduleBar(this.nextBar, this.CHORDS[this.chordIdx % this.CHORDS.length]);
+      this.chordIdx++; this.nextBar += this.BAR;
+    }
+  },
+
+  scheduleBar(t0, ch){
+    const ctx = this.ctx;
+    const mk = (type, freq, peak, attack) => {
+      const o = ctx.createOscillator(); o.type = type; o.frequency.value = freq;
+      const g = ctx.createGain(); g.gain.value = 0;
+      g.gain.linearRampToValueAtTime(peak, t0 + attack);
+      g.gain.setValueAtTime(peak, t0 + this.BAR - 1.2);
+      g.gain.linearRampToValueAtTime(0, t0 + this.BAR + 1.4);   // 释放与下一小节交叠，无断点
+      o.connect(g); g.connect(this.musicBus);
+      o.start(t0); o.stop(t0 + this.BAR + 1.5);
+    };
+    mk('sine', ch.bass, 0.10, 0.9);
+    for (const f of ch.pad) mk('triangle', f, 0.030, 1.3);
+  },
+
+  purr(dur){   // 呼噜：棕噪声 → 低通 → 24Hz 颤音调幅 + 62Hz 体声；抚摸触发，不主动索取
+    if (!this.unlocked) return;
+    this.stopPurr();
+    const ctx = this.ctx, t0 = ctx.currentTime;
+    const len = ctx.sampleRate;
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; last = (last + 0.045 * w) / 1.045; d[i] = last * 2.4; }
+    const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 340; lp.Q.value = 0.5;
+    const trem = ctx.createGain(); trem.gain.value = 0.55;
+    const lfo = ctx.createOscillator(); lfo.frequency.value = 24;
+    const lfoG = ctx.createGain(); lfoG.gain.value = 0.42;
+    lfo.connect(lfoG); lfoG.connect(trem.gain);
+    const body = ctx.createOscillator(); body.type = 'sine'; body.frequency.value = 62;
+    const bodyG = ctx.createGain(); bodyG.gain.value = 0.30;
+    const env = ctx.createGain(); env.gain.value = 0;
+    env.gain.linearRampToValueAtTime(0.34, t0 + 0.35);
+    env.gain.setValueAtTime(0.34, t0 + Math.max(0.35, dur - 0.45));
+    env.gain.linearRampToValueAtTime(0, t0 + dur);
+    src.connect(lp); lp.connect(trem); trem.connect(env);
+    body.connect(bodyG); bodyG.connect(env);
+    env.connect(this.master);
+    src.start(t0); lfo.start(t0); body.start(t0);
+    const stopAt = t0 + dur + 0.05;
+    src.stop(stopAt); lfo.stop(stopAt); body.stop(stopAt);
+    this.purrCtl = { nodes: [src, lfo, body], env };
+    src.onended = () => { try { env.disconnect(); lp.disconnect(); } catch(e) {} };
+  },
+
+  stopPurr(){   // 松手：0.25s 淡出再停，避免硬切爆音
+    const ctl = this.purrCtl;
+    if (!ctl) return;
+    this.purrCtl = null;
+    try {
+      const now = this.ctx.currentTime;
+      ctl.env.gain.cancelScheduledValues(now);
+      ctl.env.gain.setValueAtTime(ctl.env.gain.value, now);
+      ctl.env.gain.linearRampToValueAtTime(0, now + 0.25);
+      for (const n of ctl.nodes) n.stop(now + 0.3);
+    } catch(e) {}
+  },
+
+  onSleep(){   // 猫睡了：音乐轻轻退远，只剩月光和安静
+    if (!this.unlocked) return;
+    const g = this.musicBus.gain, now = this.ctx.currentTime;
+    g.cancelScheduledValues(now); g.setValueAtTime(g.value, now);
+    g.linearRampToValueAtTime(0.35, now + 8);
+  }
+};
+
+/* ================= 更新 ================= */
+function spawnRain(){   // 玻璃挂水：2-4 滴，有的从窗洞顶、有的从中段开始滑
+  const n = 2 + Math.floor(Math.random() * 3);
+  for (let i = 0; i < n; i++) {
+    drops.push({
+      x: GEO.openX0 + 6 + Math.random() * (GEO.openX1 - GEO.openX0 - 12),
+      y: GEO.openY0 + 4 + Math.random() * 30,
+      spd: 10 + Math.random() * 12,
+      fat: Math.random() < 0.35,        // 少数是饱满的大水滴
+      seed: Math.random() * 100
+    });
+  }
+}
+
+function update(dt){
+  t += dt;
+  skyK = smoothstep(t, 42, 60);                                    // 天色从深蓝沉入更深的蓝
+  holdK += ((holding ? 1 : 0) - holdK) * Math.min(1, dt * 2.2);    // 按住→暖意缓入，松手→缓出
+  if (state === 'curled') {
+    for (const ev of schedule) {
+      if (!ev.fired && t >= ev.t) {
+        ev.fired = true;
+        if (t > 54) continue;                                      // 临近入睡，不再安排新事件
+        if (ev.type === 'tail') tailAnimT = t;
+        if (ev.type === 'ear')  earAnimT = t;
+        if (ev.type === 'halfEye') halfEyeT = t;
+        if (ev.type === 'adjust') adjustT = t;
+        if (ev.type === 'bird') bird = { t0: t };
+        if (ev.type === 'meteor') meteor = { t0: t };
+        if (ev.type === 'rain') spawnRain();
+      }
+    }
+    if (t >= 59.5) { state = 'sleeping'; AudioSys.onSleep(); }      // 约一分钟：猫完全合眼入睡
+  }
+  if (sleepEarT >= 0 && t - sleepEarT > 0.6) sleepEarT = -1;
+  if (bird) {                                                    // 生命周期归 update，draw 只渲染
+    const bx = GEO.openX0 - 8 + (t - bird.t0) * 22;
+    if (bx > GEO.openX1 + 8) bird = null;
+  }
+  if (meteor && t - meteor.t0 > 1.0) meteor = null;
+  for (let i = drops.length - 1; i >= 0; i--) {                  // 雨滴：时停时滑 + 微微之字
+    const d = drops[i];
+    const stick = 0.25 + 0.75 * noise(d.seed, t * 0.9);
+    d.y += d.spd * stick * dt;
+    d.x += (noise(d.seed + 50, t * 0.6) - 0.5) * 0.35;
+    if (d.y > GEO.openY1 - 4) drops.splice(i, 1);
+  }
+}
+
+/* ================= 猫：造型数据（sprite 坐标，base y=29 贴窗台面） ================= */
+// 颜色键：O 橘 / Od 橘暗 / R 月光轮廓 / W 白 / Ws 白暗
+const BODY_RUNS = [
+  [ 8,16,28,'O'],[ 9,13,30,'O'],[10,11,32,'O'],[11, 9,33,'O'],[12, 8,34,'O'],
+  [13, 7,35,'O'],[14, 6,36,'O'],[15, 6,36,'O'],[16, 5,37,'O'],[17, 5,37,'O'],
+  [18, 4,38,'O'],[19, 4,38,'O'],[20, 4,39,'O'],[21, 3,39,'O'],[22, 3,40,'O'],
+  [23, 3,40,'O'],[24, 2,40,'O'],[25, 2,41,'O'],[26, 2,41,'O'],[27, 2,41,'O'],
+  [28, 3,41,'O'],[29, 4,41,'O']
+];
+const BREATH_RUN = [7, 17, 27, 'O'];       // 呼吸=背脊顶部长出一行（不移行，杜绝缝隙）
+const SHADE_RUNS = [   // 背光左下缘
+  [21,3,3,'Od'],[22,3,3,'Od'],[23,3,3,'Od'],[24,2,2,'Od'],[25,2,2,'Od'],
+  [26,2,2,'Od'],[27,2,2,'Od'],[28,3,3,'Od'],[29,4,41,'Od']
+];
+const RIM_RUNS = [     // 月光侧轮廓（背脊朝月）
+  [ 8,22,28,'R'],[ 9,26,30,'R'],[10,30,32,'R'],[11,32,33,'R'],[12,33,34,'R'],[13,34,35,'R']
+];
+const NECK_RUNS = [    // 静态颈柱：不随头动，抬头时填满颈关节，杜绝头身分离
+  [13,33,37,'O'],[14,33,37,'O'],[15,33,37,'O'],[16,33,37,'O'],
+  [17,34,37,'O'],[18,34,37,'O'],[19,34,37,'O']
+];
+const NAPE_RUNS = [    // 静态后颈柱：不随头动；头 lift+lean 移开后后颈仍与背部相连（"分离"真因：
+  [ 2,38,42,'O'],    //   头整体斜移后，x28-31 后颈区无任何静态覆盖——颈柱太靠右盖不到）
+  [ 4,29,32,'O'],[ 5,29,32,'O'],[ 6,28,33,'O'],[ 7,28,33,'O'],
+  [ 8,28,34,'O'],[ 9,29,34,'O'],[10,29,34,'O'],[11,30,34,'O'],[12,30,35,'O']
+];                     // 静置时全部藏在头轮廓内（同色 O），零视觉变化；含耳基行，顺手封住耳抽动的 1px 缝
+const CHEST_RUNS = [   // 前胸白
+  [20,36,40,'W'],[21,36,40,'W'],[22,36,41,'W'],[23,36,41,'W'],[24,37,41,'W'],
+  [25,37,41,'W'],[26,37,41,'W'],[27,37,41,'W'],[28,37,41,'W'],[29,37,41,'Ws']
+];
+const PAW_RUNS = [     // 下巴下的白爪（不随头动）
+  [24,36,44,'W'],[25,35,45,'W'],[26,35,45,'W'],[27,35,45,'W'],[28,35,45,'W'],[29,36,45,'Ws'],
+  [26,40,40,'Ws'],[27,40,40,'Ws']
+];
+const HEAD_RUNS = [    // 头组（随 lift/lean 动），下巴白落到爪上
+  [ 3,31,42,'O'],[ 4,29,44,'O'],[ 5,29,45,'O'],[ 6,28,45,'O'],[ 7,28,46,'O'],
+  [ 8,28,46,'O'],[ 9,28,46,'O'],[10,28,46,'O'],[11,29,46,'O'],[12,30,46,'O'],
+  [13,30,46,'O'],[14,31,46,'O'],[15,32,46,'O'],[16,33,46,'O'],
+  [12,41,46,'W'],[13,41,46,'W'],[14,41,46,'W'],[15,41,46,'W'],[16,40,46,'W'],
+  [17,34,46,'W'],[18,34,46,'W'],[19,35,46,'W'],[20,35,45,'W'],[21,36,45,'W'],
+  [22,36,45,'W'],[23,36,44,'W'],[13,45,45,'nose'],
+  [24,36,44,'W'],[25,37,44,'W'],[26,38,44,'W']    // 下巴桥：抬头时衔接下巴与白爪，消除头身分离
+];
+const EAR_RUNS = [     // 双耳；B 耳（右）可抽动
+  [0,32,32,'O','A'],[1,31,33,'O','A'],[2,30,34,'O','A'],[2,32,32,'Od','A'],
+  [0,40,40,'O','B'],[1,39,41,'O','B'],[2,38,42,'O','B'],[2,40,40,'Od','B']
+];
+const TAIL_FRAMES = [  // 整帧替换式甩尾（不剪切形状，每帧人工校验连续）；长尾 30px 贴窗台，甩动时尾尖扬起 12px
+  [ // 0 静置
+    [26,  0,  6,'O'],[27, -4, 6,'O'],[28, -6, 4,'Od'],
+    [26,-10, -1,'O'],[27,-14,-5,'O'],[28,-15,-7,'Od'],
+    [26,-18,-11,'O'],[27,-21,-15,'O'],[28,-21,-16,'Od'],
+    [25,-20,-18,'O'],[26,-24,-19,'O'],[27,-24,-22,'O']
+  ],
+  [ // 1 起：后段离台，尾尖抬至 7px
+    [28,-14,  4,'Od'],
+    [27,-16,  6,'O'],
+    [26,-18,  6,'O'],
+    [25,-21,-11,'O'],
+    [24,-23,-15,'O'],
+    [23,-24,-18,'O'],
+    [22,-24,-21,'O']
+  ],
+  [ // 2 扬：后半尾成弧，尾尖抬至 10px
+    [28, -8,  4,'Od'],
+    [27,-10,  6,'O'],
+    [26,-12,  6,'O'],
+    [25,-15, -8,'O'],
+    [24,-17, -9,'O'],
+    [23,-19,-11,'O'],
+    [22,-21,-13,'O'],
+    [21,-22,-15,'O'],
+    [20,-22,-17,'O'],
+    [19,-21,-18,'O']
+  ],
+  [ // 3 顶点内勾：尾尖竖到 12px，向回勾
+    [28, -6,  4,'Od'],
+    [27, -8,  6,'O'],
+    [26,-10,  6,'O'],
+    [25,-13, -7,'O'],
+    [24,-15, -8,'O'],
+    [23,-16, -9,'O'],
+    [22,-17,-10,'O'],
+    [21,-18,-11,'O'],
+    [20,-18,-12,'O'],
+    [19,-18,-12,'O'],
+    [18,-17,-12,'O'],
+    [17,-16,-12,'O']
+  ]
+];
+const EYE_X = 36, EYE_Y = 9;   // sprite 内眼位（3×2）
+
+function drawRuns(runs, ox, oy, opt){
+  opt = opt || {};
+  for (const r of runs) {
+    const y = r[0], x0 = r[1], x1 = r[2];
+    let dy = 0, dx = 0;
+    if (opt.lift) dy -= opt.lift;                                // 抚摸时头离爪
+    if (opt.lean && y <= 11) dx += opt.lean;                     // 偏头以颈为轴
+    fill(C[r[3]]); rect(Math.round(ox + x0 + dx), Math.round(oy + y + dy), x1 - x0 + 1, 1);
+  }
+}
+
+/* ================= 猫：状态 → 姿态参数 ================= */
+function catPose(){
+  // 呼吸（生命底噪，持续）：入睡后变缓
+  const period = 4.2 + 1.6 * smoothstep(t, 50, 60);
+  const breath = Math.round((Math.sin(t * 2 * Math.PI / period - Math.PI / 2) * 0.5 + 0.5) * 1.3);
+  const p = { breath, lift: 0, lean: 0, tailFrame: 0, earB: 0, open: 0, ldx: 1, ldy: -1 };
+
+  if (tailAnimT >= 0) {                                          // 尾扫 3.0s 懒洋洋：静→起→扬→竖尖(定帧)→缓回
+    const k = (t - tailAnimT) / 3.0;
+    if (k >= 1) tailAnimT = -1;
+    else p.tailFrame = k < 0.07 ? 0 : k < 0.22 ? 1 : k < 0.40 ? 2 : k < 0.62 ? 3 : k < 0.76 ? 2 : k < 0.88 ? 1 : 0;
+  }
+  if (earAnimT >= 0) {                                           // 耳朵转半圈 0.6s
+    const k = (t - earAnimT) / 0.6;
+    if (k >= 1) earAnimT = -1; else p.earB = Math.round(Math.sin(k * Math.PI));
+  }
+  if (sleepEarT >= 0) {                                          // 睡后轻触：只动耳
+    const k = (t - sleepEarT) / 0.6;
+    p.earB = Math.round(Math.sin(Math.min(1, k) * Math.PI));
+  }
+  if (halfEyeT >= 0 && state === 'curled') {                     // 半睁眼看月亮（录制模式全睁+更久，保证视频里读得出）
+    const dur = SHOT ? 4.0 : 2.8, peak = SHOT ? 1.0 : 0.55;
+    const k = t - halfEyeT;
+    if (k >= dur) halfEyeT = -1;
+    else p.open = peak * Math.min(ramp(k, 0, 0.35), 1 - ramp(k, dur - 0.55, dur));
+  }
+  if (adjustT >= 0 && state === 'curled') {                      // 自主微调坐姿 3.2s：微抬头朝月亮 + 惺忪半睁眼
+    const k = (t - adjustT) / 3.2;
+    if (k >= 1) adjustT = -1;
+    else {
+      const s = Math.sin(Math.PI * k);
+      p.lift = Math.round(1.4 * s);
+      p.lean = Math.round(1.2 * s);
+      p.open = Math.max(p.open, (SHOT ? 0.8 : 0.45) * Math.min(ramp(k, 0, 0.2), 1 - ramp(k, 0.8, 1)));
+    }
+  }
+  return p;
+}
+
+function drawCat(){
+  const ox = GEO.catX, oy = GEO.catBaseY - 29;
+  const p = catPose();
+
+  drawRuns(TAIL_FRAMES[p.tailFrame], ox, oy, {});
+  drawRuns(BODY_RUNS, ox, oy, {});
+  drawRuns(SHADE_RUNS, ox, oy, {});
+  drawRuns(RIM_RUNS, ox, oy, {});
+  if (p.breath >= 1) drawRuns([BREATH_RUN], ox, oy, {});         // 吸气：背脊顶部长一行
+
+  // 动态颈部延伸块（用户 2026-08-03 提供的修正）：抬头时填充下巴-颈胸关节，随 lift/lean 走
+  if (p.lift > 0) {
+    fill(C.O);
+    rect(ox + 31 + p.lean, oy + 17 - p.lift, 15, p.lift + 1);
+    fill(C.W);
+    rect(ox + 36 + p.lean, oy + 21 - p.lift, 8, p.lift + 1);
+  }
+
+  drawRuns(NECK_RUNS, ox, oy, {});                               // 静态颈柱（抬头时露出，填缝）
+  drawRuns(NAPE_RUNS, ox, oy, {});                               // 静态后颈柱（lift+lean 斜移时封后颈）
+  drawRuns(CHEST_RUNS, ox, oy, {});
+  drawRuns(PAW_RUNS, ox, oy, {});
+
+  const hOpt = { lift: p.lift, lean: p.lean };
+  drawRuns(HEAD_RUNS, ox, oy, hOpt);
+
+  for (const r of EAR_RUNS) {                                    // 耳随头组，B 耳可抽动
+    const up = p.lift + (r[4] === 'B' ? p.earB : 0);
+    const dx = r[0] <= 11 ? p.lean : 0;
+    fill(C[r[3]]); rect(Math.round(ox + r[1] + dx), Math.round(oy + r[0] - up), r[2] - r[1] + 1, 1);
+  }
+
+  // 眼
+  const ex = ox + EYE_X + p.lean, ey = oy + EYE_Y - p.lift;
+  if (p.open < 0.12) { fill(C.eye); rect(Math.round(ex), Math.round(ey + 1), 3, 1); }
+  else {
+    fill(C.eye); rect(Math.round(ex), Math.round(ey), 3, 2);
+    if (p.open < 0.6) { fill(C.catO); rect(Math.round(ex), Math.round(ey), 3, 1); }
+    else { fill(C.moon); rect(Math.round(ex + (p.ldx > 0 ? 0 : 2)), Math.round(ey + (p.ldy < 0 ? 1 : 0)), 1, 1); }
+  }
+}
+
+/* ================= 天空 / 月 / 鸟 ================= */
+function skyColorAt(y){
+  const top = lerpColor(C.skyTop, C.skyTopDeep, skyK);
+  const bot = lerpColor(C.skyBot, C.skyBotDeep, skyK);
+  return lerpColor(top, bot, (y - GEO.openY0) / (GEO.openY1 - GEO.openY0));
+}
+function drawSky(){
+  noStroke();
+  for (let y = GEO.openY0; y < GEO.openY1; y += 2) { fill(skyColorAt(y)); rect(GEO.openX0, y, GEO.openX1 - GEO.openX0, 2); }
+}
+function drawStars(){
+  const a0 = ramp(t, 0.5, 2.0);                                  // 分层入场：星随氛围后亮
+  if (a0 <= 0) return;
+  for (const s of stars) {
+    const tw = 0.75 + noise(s.x * 0.05, s.y * 0.05, t * 0.3) * 0.5;
+    const a = s.b * tw * a0 * 255;
+    const c = lerpColor(C.starDim, C.starBright, s.b);
+    fill(red(c), green(c), blue(c), a);
+    rect(s.x, s.y, s.size, s.size);
+  }
+}
+function moonCenter(){                                            // 一分钟内月亮在窗格间横移一小段
+  const k = smoothstep(Math.min(t, 60), 0, 60);
+  return { x: GEO.moonCx + Math.round(10 * k), y: GEO.moonCy + Math.round(4 * k) };
+}
+function drawMoon(){
+  const m = moonCenter(), r = GEO.moonR;
+  const dimK = [1, 0.95, 0.88, 0.8, 0.72][moonPhase];
+  const shadowOff = [99, 13, 7, 2, -3][moonPhase];
+  const glowRamp = ramp(t, 0.8, 2.2);
+  const glowPulse = state === 'sleeping' ? 1 + 0.3 * Math.sin(t * 0.8) : 1;
+  // 月华（像素圆晕，三层低透明，睡着后仍缓慢呼吸——只有月光继续亮着）
+  noStroke();
+  const gc = C.moon;
+  const glowLayers = [[r + 11, 4], [r + 6, 8], [r + 3, 13]];
+  for (const gl of glowLayers) {
+    const gr = gl[0], ga = gl[1] * glowRamp * glowPulse;
+    fill(red(gc), green(gc), blue(gc), ga);
+    for (let dy = -gr; dy <= gr; dy++) {
+      const hw = Math.floor(Math.sqrt(gr * gr - dy * dy));
+      rect(m.x - hw, m.y + dy, hw * 2 + 1, 1);
+    }
+  }
+  // 月盘（像素行，干净月面——无环形山，只留极轻明暗）
+  for (let dy = -r; dy <= r; dy++) {
+    const hw = Math.floor(Math.sqrt(r * r - dy * dy));
+    const rowC = lerpColor(C.moon, C.moonShade, (dy + r) / (2 * r) * 0.45);
+    fill(red(rowC) * dimK, green(rowC) * dimK, blue(rowC) * dimK);
+    rect(m.x - hw, m.y + dy, hw * 2 + 1, 1);
+  }
+  // 月相阴影（与同行天色一致）
+  if (shadowOff < 90) {
+    for (let dy = -r; dy <= r; dy++) {
+      const sdy = dy * dy;
+      if (sdy > r * r) continue;
+      const shw = Math.floor(Math.sqrt(r * r - sdy));
+      fill(skyColorAt(m.y + dy));
+      rect(m.x + shadowOff - shw, m.y + dy, shw * 2 + 1, 1);
+    }
+  }
+}
+function drawMeteor(){
+  if (!meteor) return;
+  const mt = t - meteor.t0;
+  const fadeIn = ramp(mt, 0, 0.15), fadeOut = 1 - ramp(mt, 0.7, 1.0);
+  const a = Math.min(fadeIn, fadeOut);
+  const mx = Math.round(GEO.openX0 + 8 + mt * 60);               // 划向右下
+  const my = Math.round(30 + mt * 24);
+  noStroke();
+  for (let i = 0; i < 5; i++) {                                  // 头亮尾淡的 1px 斜尾
+    fill(252, 248, 240, a * (220 - i * 42));
+    rect(mx - 2 * i, my - i, 1, 1);
+  }
+}
+function drawBird(){
+  if (!bird) return;
+  const bt = t - bird.t0;
+  const bx = Math.round(GEO.openX0 - 8 + bt * 22);
+  const by = Math.round(78 + Math.sin(bt * 2.2) * 2);
+  const wingUp = Math.floor(bt * 6) % 2 === 0;
+  fill(C.bird);
+  rect(bx, by, 4, 1);                                            // 身
+  rect(bx + 1, by + (wingUp ? -1 : 1), 2, 1);                    // 翼
+}
+function drawRain(){                                             // 玻璃上的雨：在玻璃上，故在天空之后、窗框之前
+  noStroke();
+  if (!drops.length) return;
+  for (const d of drops) {
+    const x = Math.round(d.x), y = Math.round(d.y);
+    if (d.fat) {                                                 // 饱满水滴：2px 体 + 月光高光
+      fill(226, 240, 250, 70);  rect(x, y - 1, 1, 1);
+      fill(226, 240, 250, 96);  rect(x, y, 2, 1);
+      fill(226, 240, 250, 70);  rect(x, y + 1, 1, 1);
+      fill(255, 255, 255, 150); rect(x, y, 1, 1);
+    } else {
+      fill(214, 232, 244, 55);  rect(x, y - 2, 1, 1);            // 水痕尾（渐淡）
+      fill(226, 240, 250, 95);  rect(x, y - 1, 1, 1);
+      fill(236, 248, 255, 135); rect(x, y, 1, 1);                // 水珠头
+    }
+  }
+}
+
+/* ================= 窗 / 墙 / 窗台 ================= */
+function drawWall(){
+  noStroke();
+  for (let y = 0; y < CH; y += 2) {
+    fill(lerpColor(C.wall0, C.wall1, y / CH));
+    rect(0, y, CW, 2);
+  }
+}
+function drawWindowFrame(){
+  const x0 = GEO.openX0 - GEO.frameW, y0 = GEO.openY0 - GEO.frameW;
+  const x1 = GEO.openX1 + GEO.frameW, y1 = GEO.openY1 + GEO.frameW;
+  fill(C.frame);
+  rect(x0, y0, x1 - x0, GEO.frameW);                             // 上
+  rect(x0, y1 - GEO.frameW, x1 - x0, GEO.frameW);                // 下
+  rect(x0, y0, GEO.frameW, y1 - y0);                             // 左
+  rect(x1 - GEO.frameW, y0, GEO.frameW, y1 - y0);                // 右
+  fill(C.frameHi);                                               // 受光内缘（上/左）
+  rect(x0, y1 - GEO.frameW, x1 - x0, 1);
+  rect(x1 - GEO.frameW, y0, 1, y1 - y0);
+  fill(C.frameDk);                                               // 背光内缘（下/右）
+  rect(x0, y0 + GEO.frameW - 1, x1 - x0, 1);
+  rect(x0 + GEO.frameW - 1, y0, 1, y1 - y0);
+  fill(C.frame);                                                 // 窗棂
+  rect(GEO.mullX0, GEO.openY0, GEO.mullX1 - GEO.mullX0, GEO.openY1 - GEO.openY0);
+  rect(GEO.openX0, GEO.mullY0, GEO.openX1 - GEO.openX0, GEO.mullY1 - GEO.mullY0);
+  fill(C.frameDk);
+  rect(GEO.mullX1 - 1, GEO.openY0, 1, GEO.openY1 - GEO.openY0);
+  rect(GEO.openX0, GEO.mullY1 - 1, GEO.openX1 - GEO.openX0, 1);
+}
+function drawSill(){
+  noStroke();
+  fill(C.sillTop); rect(GEO.sillX0, GEO.sillY, GEO.sillX1 - GEO.sillX0, 3);
+  fill(C.sillHi);  rect(GEO.sillX0, GEO.sillY, GEO.sillX1 - GEO.sillX0, 1);
+  fill(C.sillFace);rect(GEO.sillX0, GEO.sillY + 3, GEO.sillX1 - GEO.sillX0, GEO.sillH - 4);
+  fill(C.sillDk);  rect(GEO.sillX0, GEO.sillY + GEO.sillH - 1, GEO.sillX1 - GEO.sillX0, 1);
+  fill(4, 7, 13, 110); rect(GEO.sillX0 + 2, GEO.sillY + GEO.sillH, GEO.sillX1 - GEO.sillX0 - 4, 2); // 台上墙影
+  // 月光落在窗台上（睡着后仍亮）
+  const glowRamp = ramp(t, 0.8, 2.2);
+  const mp = state === 'sleeping' ? 1 + 0.25 * Math.sin(t * 0.8) : 1;
+  fill(252, 250, 244, 30 * glowRamp * mp); rect(96, GEO.sillY, 56, 2);
+  fill(252, 250, 244, 46 * glowRamp * mp); rect(110, GEO.sillY, 34, 1);
+  // 猫在窗台的影子
+  fill(6, 10, 17, 90); rect(GEO.catX - 4, GEO.sillY, 52, 1);
+  fill(6, 10, 17, 55); rect(GEO.catX, GEO.sillY + 1, 44, 1);
+}
+
+/* ================= 小盆栽（氛围物：叶片轻摇，不可触摸——只有猫回应触摸） ================= */
+const PLANT = { x: 145, baseY: GEO.sillY };   // 盆中心，坐在窗台右侧月光里
+const POT_RUNS = [
+  [-8,-6, 6,'potRim'],[-7,-6, 6,'potRim'],
+  [-6,-5, 5,'pot'],[-5,-5, 5,'pot'],[-4,-5, 5,'pot'],[-3,-4, 4,'pot'],[-2,-4, 4,'pot'],[-1,-3, 3,'potDk']
+];
+const LEAVES = [   // 叶尖点列（dx, dy 相对盆口中心），phase 决定摇摆相位
+  { pts: [[0,-1],[0,-2],[0,-3],[1,-4],[1,-5],[2,-6],[2,-7],[3,-8],[3,-9],[4,-10]], phase: 0.0 },
+  { pts: [[-1,-1],[-2,-2],[-2,-3],[-3,-4],[-3,-5],[-4,-6],[-4,-7],[-5,-8]],     phase: 1.4 },
+  { pts: [[1,-1],[2,-2],[3,-3],[3,-4],[4,-5],[5,-6],[5,-7]],                   phase: 2.7 }
+];
+function drawPlant(){
+  noStroke();
+  const ox = PLANT.x, oy = PLANT.baseY;
+  fill(6, 10, 17, 70); rect(ox - 5, oy, 11, 1);                 // 盆在窗台的影子
+  for (const r of POT_RUNS) { fill(C[r[3]]); rect(ox + r[1], oy + r[0], r[2] - r[1] + 1, 1); }
+  for (const lf of LEAVES) {
+    const sway = Math.round(Math.sin(t * 2 * Math.PI / 5.7 + lf.phase) * 1.2);   // 轻摇 ±1px
+    const n = lf.pts.length;
+    for (let i = 0; i < n; i++) {
+      const pt = lf.pts[i];
+      const upper = i >= n - 4 ? sway : (i >= n - 6 ? Math.round(sway * 0.5) : 0);  // 叶尖摆得多
+      fill(i >= n - 2 ? C.leafHi : C.leaf);
+      rect(ox + pt[0] + upper, oy - 7 + pt[1], 1, 1);
+    }
+  }
+}
+
+/* ================= 按住陪伴暖意（"我知道你在"：光影微暖，猫不表演） ================= */
+function drawWarmth(){
+  if (holdK < 0.01) return;
+  noStroke();
+  fill(255, 184, 118, 11 * holdK); rect(0, 0, CW, CH);           // 全画面一线暖
+  const m = moonCenter();                                        // 月光区再暖半分
+  fill(255, 200, 142, 15 * holdK);
+  for (let dy = -24; dy <= 24; dy++) {
+    const hw = Math.floor(Math.sqrt(24 * 24 - dy * dy));
+    rect(m.x - hw, m.y + dy, hw * 2 + 1, 1);
+  }
+}
+
+/* ================= QA 薄入口（复用生产函数，不复制状态机） ================= */
+function resetWorldForQA(){
+  t = 0; state = 'curled'; skyK = 0;
+  tailAnimT = -1; earAnimT = -1; halfEyeT = -1; adjustT = -1; sleepEarT = -1;
+  bird = null; meteor = null; drops = [];
+  holding = false; holdK = 0;
+  initSchedule();
+}
+
+/* ================= 主循环（远 → 近） ================= */
+function draw(){
+  const dt = Math.min(deltaTime * 0.001, 0.1) * TIME_SCALE;
+  update(dt);
+  background(C.wall1);
+  drawWall();
+  drawSky();
+  drawStars();
+  drawMeteor();
+  drawMoon();
+  drawBird();
+  drawRain();
+  drawWindowFrame();
+  drawSill();
+  drawPlant();
+  drawCat();
+  drawWarmth();
+  const fade = 1 - ramp(t, 0, 1.6);                              // 被发现，而非倒在屏幕上
+  if (fade > 0) { fill(red(C.wall1), green(C.wall1), blue(C.wall1), fade * 255); rect(0, 0, CW, CH); }
+}
+</script>
+<script type="application/pixel-bloom-qa">
+globalThis.__PIXEL_BLOOM_QA__ = {
+  horizonSeconds: 60,
+  dt: 0.05,
+  requiredStates: ["curled", "sleeping"],
+  terminalStates: ["sleeping"],
+
+  reset() { resetWorldForQA(); },
+  begin() { onHoldStart(); onHoldEnd(); },
+  step(dt) { update(dt); },
+  state() { return state; },
+
+  entities() {
+    // 猫：sprite 实测外沿（尾尖 x=-24 留 2px 余量，头右缘 x=46+偏头2，耳顶 y=0 + 抬头3 + 耳动1）
+    const list = [{
+      id: "cat",
+      points: [
+        [GEO.catX - 26, GEO.catBaseY - 34], [GEO.catX + 49, GEO.catBaseY - 34],
+        [GEO.catX - 26, GEO.catBaseY],      [GEO.catX + 49, GEO.catBaseY]
+      ]
+    }];
+    // 月亮：四极值点（月华是环境光晕，按契约排除）
+    const m = moonCenter();
+    list.push({
+      id: "moon",
+      points: [
+        [m.x, m.y - GEO.moonR], [m.x, m.y + GEO.moonR],
+        [m.x - GEO.moonR, m.y], [m.x + GEO.moonR, m.y]
+      ]
+    });
+    // 鸟：飞过窗口的瞬态事件，外沿四点；不声明逃逸——画布即天空世界的边界
+    if (bird) {
+      const bt = t - bird.t0;
+      const bx = Math.round(GEO.openX0 - 8 + bt * 22);
+      const by = Math.round(78 + Math.sin(bt * 2.2) * 2);
+      list.push({
+        id: "bird",
+        points: [[bx, by - 1], [bx + 4, by - 1], [bx, by + 1], [bx + 4, by + 1]]
+      });
+    }
+    // 盆栽：盆 + 叶尖最大外沿（含摇摆 ±1px）
+    list.push({
+      id: "plant",
+      points: [
+        [PLANT.x - 7, PLANT.baseY - 19], [PLANT.x + 7, PLANT.baseY - 19],
+        [PLANT.x - 7, PLANT.baseY],      [PLANT.x + 7, PLANT.baseY]
+      ]
+    });
+    // 流星：瞬态，头尾外沿
+    if (meteor) {
+      const mt = t - meteor.t0;
+      const mx = Math.round(GEO.openX0 + 8 + mt * 60);
+      const my = Math.round(30 + mt * 24);
+      list.push({ id: "meteor", points: [[mx - 8, my - 4], [mx, my - 4], [mx - 8, my], [mx, my]] });
+    }
+    // 雨滴：瞬态，含水痕尾与饱满水滴体
+    for (const d of drops) {
+      const y = Math.round(d.y);
+      list.push({ id: "drop", points: [[d.x - 2, y - 3], [d.x + 2, y - 3], [d.x - 2, y + 1], [d.x + 2, y + 1]] });
+    }
+    return list;
+  },
+
+  contains(x, y) { return x >= 0 && x <= CW && y >= 0 && y <= CH; }
+};
+</script></body></html>
