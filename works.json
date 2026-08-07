@@ -2,8 +2,8 @@
   "repo": "shasha1108/healing-visual-lab",
   "url": "https://github.com/shasha1108/healing-visual-lab",
   "pages": "https://shasha1108.github.io/healing-visual-lab/",
-  "total": 36,
-  "updated": "2026-08-03",
+  "total": 37,
+  "updated": "2026-08-07",
   "description": "Interactive healing H5 experiments — Three.js WebGL, Canvas 2D, GLSL shaders, Web Audio, GSAP, creative coding for emotional design. Most works load Three.js r128 via CDN; silent-translator is the only zero-dependency work.",
   "tech_landscape": {
     "threejs": [
@@ -20,6 +20,7 @@
       "layered-mountains"
     ],
     "canvas_2d": [
+      "eternal-bloom",
       "sealed-summer-jar",
       "moon-cat",
       "the-old-signal",
@@ -62,6 +63,7 @@
       "layered-mountains"
     ],
     "web_audio": [
+      "eternal-bloom",
       "sealed-summer-jar",
       "moon-cat",
       "the-old-signal",
@@ -126,6 +128,7 @@
       "inkmeditation"
     ],
     "touch_interaction": [
+      "eternal-bloom",
       "sealed-summer-jar",
       "moon-cat",
       "the-old-signal",
@@ -160,6 +163,7 @@
       "silent-translator"
     ],
     "p5js": [
+      "eternal-bloom",
       "sealed-summer-jar",
       "moon-cat",
       "the-old-signal",
@@ -1285,6 +1289,41 @@
         "layered-mountains.jpg"
       ],
       "date": "2026-06-11"
+    },
+    {
+      "slug": "eternal-bloom",
+      "title_en": "Eternal Bloom",
+      "title_zh": "永生花工坊",
+      "tagline": "调好一朵花的每个参数，封进玻璃钟罩，它就替你一直开着。",
+      "tech": [
+        "p5.js",
+        "Canvas 2D",
+        "Web Audio API"
+      ],
+      "render": "Canvas2D (p5.js)",
+      "has_audio": true,
+      "has_touch": true,
+      "particle_count": "N/A",
+      "dependencies": 1,
+      "healing_domain": "meditation",
+      "keywords": [
+        "p5.js",
+        "canvas 2d",
+        "web audio api",
+        "touch interaction"
+      ],
+      "use_cases": [
+        "p5.js",
+        "canvas 2d",
+        "web audio api",
+        "touch interaction"
+      ],
+      "files": [
+        "eternal-bloom.html",
+        "eternal-bloom.md",
+        "eternal-bloom_1.gif"
+      ],
+      "date": "2026-08-07"
     }
   ]
 }

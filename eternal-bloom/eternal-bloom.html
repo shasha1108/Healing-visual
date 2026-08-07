@@ -1,0 +1,1453 @@
+<!DOCTYPE html>
+<!--
+  Title: Eternal Bloom · 永生花工坊
+  Concept: 参数化 3D 花卉引擎（玫瑰/牡丹/彼岸花/牵牛花）+ 玻璃钟罩永生花收藏架。
+  Tech: p5.js, Canvas 2D, Web Audio API
+  Keywords: p5.js, canvas 2d, web audio api, touch interaction
+  Features: Parametric 3D flower engine (rose / peony / lycoris / morning glory) with matrix projection, painter's algorithm and pointer-flinch petal physics; seal any bloom under a glass cloche on an eternal-flower shelf with dated nameplates, and tap a dome to take its recipe back.
+  Render: Canvas2D (p5.js)
+  Audio: yes
+  Touch: yes
+  Particles: N/A
+  Standalone: yes, single HTML file, 1 CDN dependencies
+  Repo: https://github.com/shasha1108/healing-visual-lab
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>永生花工坊 · Eternal Bloom</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+<script>window.p5||document.write('<script src="https://cdn.bootcdn.net/ajax/libs/p5.js/1.9.0/p5.min.js"><\/script>');</script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100vw;height:100vh;overflow:hidden;background:#05020a;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;user-select:none;-webkit-user-select:none;touch-action:none}
+#canvas-container{position:absolute;inset:0;overflow:hidden}
+canvas{display:block;width:100%!important;height:100%!important;z-index:1}
+
+#ui-container{position:absolute;top:20px;left:20px;z-index:10;width:280px;max-width:calc(100vw - 40px)}
+.ui-card{background:rgba(18,8,28,0.82);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,220,150,0.22);border-radius:14px;padding:16px;color:#f3e5f0;box-shadow:0 8px 32px rgba(0,0,0,0.65)}
+.ui-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid rgba(255,220,150,0.15)}
+.ui-title{font-size:14px;font-weight:600;letter-spacing:0.5px;color:#ffe082}
+.toggle-btn{background:none;border:none;color:#ffe082;cursor:pointer;font-size:16px;padding:0 4px}
+.ui-body{display:flex;flex-direction:column;gap:10px;transition:all 0.3s ease;max-height:calc(100vh - 220px);overflow-y:auto}
+.ui-body.collapsed{display:none}
+.ui-body::-webkit-scrollbar{width:4px}
+.ui-body::-webkit-scrollbar-thumb{background:rgba(255,220,150,0.25);border-radius:2px}
+.control-group{display:flex;flex-direction:column;gap:4px}
+.control-group label{font-size:11px;color:rgba(243,229,240,0.85);display:flex;justify-content:space-between}
+.control-group label span{color:#ffe082;font-family:monospace}
+.control-group.disabled{opacity:0.35;pointer-events:none}
+input[type="range"]{-webkit-appearance:none;appearance:none;width:100%;height:4px;background:rgba(255,220,150,0.18);border-radius:2px;outline:none}
+input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;border-radius:50%;background:#ffb300;cursor:pointer;border:2px solid #ffffff;box-shadow:0 0 8px rgba(255,179,0,0.8)}
+select{background:rgba(30,12,45,0.85);border:1px solid rgba(255,220,150,0.25);color:#f3e5f0;padding:5px 8px;border-radius:6px;font-size:11px;outline:none;cursor:pointer;width:100%}
+.btn-group{display:flex;gap:8px;margin-top:4px}
+.ui-btn{flex:1;background:linear-gradient(135deg,rgba(210,130,20,0.7),rgba(120,40,10,0.85));border:1px solid rgba(255,220,150,0.35);color:#fff;padding:6px 10px;border-radius:6px;font-size:11px;cursor:pointer;transition:all 0.2s ease}
+.ui-btn:hover{background:linear-gradient(135deg,rgba(255,170,30,0.85),rgba(180,60,10,0.95));box-shadow:0 0 12px rgba(255,170,30,0.4)}
+.ui-btn.eternal{background:linear-gradient(135deg,rgba(60,140,150,0.7),rgba(20,60,80,0.85));border-color:rgba(167,236,255,0.4)}
+.ui-btn.eternal:hover{background:linear-gradient(135deg,rgba(90,200,210,0.85),rgba(40,100,130,0.95));box-shadow:0 0 14px rgba(119,215,255,0.5)}
+.ui-btn.sealing{opacity:0.5;pointer-events:none}
+.hint-text{position:absolute;top:20px;right:20px;z-index:5;color:rgba(255,220,150,0.45);font-size:11px;pointer-events:none;text-align:right;line-height:1.7}
+</style>
+</head>
+<body>
+
+<div id="ui-container">
+  <div class="ui-card">
+    <div class="ui-header">
+      <span class="ui-title">🌷 永生花工坊</span>
+      <button class="toggle-btn" id="toggle-btn" onclick="toggleUI()">—</button>
+    </div>
+    <div class="ui-body" id="ui-body">
+      <div class="control-group">
+        <label>品种 (Species)</label>
+        <select id="param-species" onchange="onSpeciesChange()">
+          <option value="rose">🌹 玫瑰</option>
+          <option value="peony">🌸 牡丹</option>
+          <option value="lycoris">🕸️ 彼岸花</option>
+          <option value="morning">🎺 牵牛花</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>配色 (Palette)</label>
+        <select id="param-theme" onchange="onParamChange()"></select>
+      </div>
+      <div class="control-group">
+        <label>花冠尺寸 (Size): <span id="val-size">150</span></label>
+        <input type="range" id="param-size" min="90" max="210" value="150" step="5">
+      </div>
+      <div class="control-group">
+        <label>花瓣宽度 (Width): <span id="val-width">1.00</span></label>
+        <input type="range" id="param-width" min="0.70" max="1.40" value="1.00" step="0.05">
+      </div>
+      <div class="control-group">
+        <label>褶皱度 (Ruffle): <span id="val-ruffle">0.55</span></label>
+        <input type="range" id="param-ruffle" min="0" max="1" value="0.55" step="0.05">
+      </div>
+      <div class="control-group">
+        <label>翻卷度 (Reflex): <span id="val-reflex">0.60</span></label>
+        <input type="range" id="param-reflex" min="0" max="1" value="0.60" step="0.05">
+      </div>
+      <div class="control-group">
+        <label>开放姿态 (Bloom): <span id="val-bloom">65%</span></label>
+        <input type="range" id="param-bloom" min="10" max="100" value="65" step="1">
+      </div>
+      <div class="control-group">
+        <label>躲避灵敏 (Flinch): <span id="val-flinch">0.70</span></label>
+        <input type="range" id="param-flinch" min="0.0" max="1.0" value="0.7" step="0.05">
+      </div>
+      <div class="btn-group">
+        <button class="ui-btn" onclick="randomizeParams()">🎲 随机品种</button>
+        <button class="ui-btn eternal" id="btn-seal" onclick="startSeal()">🏺 封存为永生花</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="hint-text">指尖靠近花瓣会轻轻躲开<br>点击花架上的永生花可取回它的配方</div>
+<div id="canvas-container"></div>
+
+<script>
+// =====================================================================
+// 品种 × 配色体系
+// =====================================================================
+const SPECIES = {
+  rose: {
+    name: '玫瑰', structure: 'spiral', sepals: true, stamen: 'cluster', stamenCount: 35, defPetals: 45,
+    themes: {
+      corolla: { label: '🌹 卡罗拉红', bg: '#05020a', root: '35,2,12', base: '110,8,38', mid: '200,22,58', tip: '248,72,112', edge: '255,190,210', sepal: '20,48,15', stamen: '#ffe8a3', spore1: '255,120,160', spore2: '255,230,170' },
+      pierre:  { label: '🌸 龙沙宝石粉', bg: '#06030c', root: '30,8,25', base: '95,25,65', mid: '190,65,125', tip: '245,130,180', edge: '255,220,240', sepal: '22,50,20', stamen: '#e0ffff', spore1: '245,130,180', spore2: '255,220,240' },
+      golden:  { label: '☀️ 金枝玉叶', bg: '#050402', root: '75,25,5', base: '185,95,10', mid: '245,185,25', tip: '255,215,60', edge: '255,180,160', sepal: '25,55,18', stamen: '#ffe082', spore1: '255,215,60', spore2: '255,180,160' },
+      sunset:  { label: '🥂 香槟日落', bg: '#080304', root: '40,8,2', base: '130,28,5', mid: '225,85,20', tip: '255,155,45', edge: '255,225,160', sepal: '25,52,18', stamen: '#fff0be', spore1: '255,170,70', spore2: '255,230,160' }
+    }
+  },
+  peony: {
+    name: '牡丹', structure: 'layers', sepals: true, stamen: 'cluster', stamenCount: 60, defPetals: 60,
+    themes: {
+      zhaofen: { label: '🌸 赵粉', bg: '#070309', root: '40,8,20', base: '150,40,80', mid: '230,110,150', tip: '250,180,205', edge: '255,232,242', sepal: '22,50,22', stamen: '#ffd75e', spore1: '250,180,205', spore2: '255,215,94' },
+      weizi:   { label: '💜 魏紫', bg: '#05030c', root: '25,5,35', base: '80,15,110', mid: '150,45,180', tip: '205,110,220', edge: '242,205,252', sepal: '20,45,25', stamen: '#ffe08a', spore1: '205,110,220', spore2: '255,224,138' },
+      yaohuang:{ label: '🌼 姚黄', bg: '#060402', root: '60,30,5', base: '180,110,15', mid: '245,185,45', tip: '255,225,110', edge: '255,246,205', sepal: '25,52,20', stamen: '#ff9d5e', spore1: '255,225,110', spore2: '255,157,94' },
+      mojin:   { label: '🖤 墨洒金', bg: '#040106', root: '20,2,8', base: '60,5,20', mid: '120,12,40', tip: '190,30,60', edge: '255,215,110', sepal: '15,32,15', stamen: '#ffd700', spore1: '255,215,110', spore2: '190,30,60' }
+    }
+  },
+  lycoris: {
+    name: '彼岸花', structure: 'spider', sepals: false, stamen: 'filament', stamenCount: 7, defPetals: 40,
+    themes: {
+      manjushage: { label: '🔴 曼珠沙华', bg: '#0a0205', root: '50,2,8', base: '140,8,20', mid: '220,25,35', tip: '255,80,70', edge: '255,165,125', sepal: '20,40,15', stamen: '#ffb347', spore1: '255,80,70', spore2: '255,179,71' },
+      white:      { label: '⚪ 白花彼岸', bg: '#050508', root: '40,40,35', base: '150,150,130', mid: '225,225,205', tip: '250,250,240', edge: '255,255,255', sepal: '25,45,25', stamen: '#e8d44d', spore1: '250,250,240', spore2: '232,212,77' },
+      yellow:     { label: '🟡 金花石蒜', bg: '#080402', root: '50,25,2', base: '170,95,5', mid: '240,160,20', tip: '255,205,70', edge: '255,242,175', sepal: '25,48,18', stamen: '#ff8c42', spore1: '255,205,70', spore2: '255,140,66' }
+    }
+  },
+  morning: {
+    name: '牵牛花', structure: 'trumpet', sepals: true, stamen: 'throat', stamenCount: 3, defPetals: 30,
+    themes: {
+      asagao:   { label: '🔵 朝颜蓝', bg: '#03040c', root: '10,15,60', base: '30,50,140', mid: '70,110,220', tip: '140,180,250', edge: '238,246,255', sepal: '18,45,20', stamen: '#fffbe8', spore1: '140,180,250', spore2: '238,246,255' },
+      murasaki: { label: '🟣 紫朝颜', bg: '#05030c', root: '30,10,55', base: '85,30,140', mid: '150,70,210', tip: '200,140,240', edge: '248,238,255', sepal: '18,45,22', stamen: '#fffbe8', spore1: '200,140,240', spore2: '248,238,255' },
+      pink:     { label: '🌸 粉朝颜', bg: '#070308', root: '60,10,30', base: '170,50,100', mid: '235,110,160', tip: '250,180,205', edge: '255,246,250', sepal: '20,46,22', stamen: '#fffbe8', spore1: '250,180,205', spore2: '255,246,250' },
+      white:    { label: '⚪ 白朝颜', bg: '#04050a', root: '40,45,55', base: '140,155,170', mid: '215,225,235', tip: '245,250,255', edge: '255,255,255', sepal: '20,46,24', stamen: '#fdf3c8', spore1: '245,250,255', spore2: '253,243,200' }
+    }
+  }
+};
+
+// =====================================================================
+// 全局状态
+// =====================================================================
+let canvas;
+let flowerHeads = [];   // 主舞台花头
+let spores = [];        // 主舞台避让孢子
+let domes = [];         // 永生花玻璃罩收藏
+let sealOrb = null;     // 封存精华球动画
+let stageFlash = 0;     // 取回配方时的主舞台闪光
+
+let params = {
+  species: 'rose', theme: 'corolla', count: 1,
+  petals: 45, size: 150, width: 1.0, ruffle: 0.55, reflex: 0.6,
+  bloom: 0.65, flinch: 0.7
+};
+
+// 固定正面视角（无旋转）：轻微俯视维持 3D 纵深
+const CAM_X = 0.33, CAM_Y = 0.0;
+
+let elapsed = 0;
+let gBloomOsc = 0;      // 开放度呼吸微振荡（全局，所有花共享）
+let touch3D = { x: 0, y: 0, z: 0, active: false, force: 0 };
+let stars = [], fireflies = [];
+let audioCtx = null;
+
+const MAX_DOMES = 8;
+
+// =====================================================================
+// p5 生命周期
+// =====================================================================
+function setup() {
+  canvas = createCanvas(windowWidth, windowHeight);
+  canvas.parent('canvas-container');
+  pixelDensity(1);
+
+  // 星野（上 2/3 天区，避开主花位）与流萤（全屏低密度）
+  for (let i = 0; i < 90; i++) stars.push({ u: random(), v: random(), r: random(1.0, 2.4), phase: random(TWO_PI), speed: random(0.3, 1.1) });
+  for (let i = 0; i < 26; i++) fireflies.push({ u: random(), v: random(0.15, 1), phase: random(TWO_PI), drift: random(0.05, 0.16), tw: random(0.5, 1.3), warm: random() < 0.25 });
+
+  rebuildThemeOptions(params.species, params.theme);
+  applyURLParams();
+  bindUIEvents();
+  readParamsFromUI();
+  buildMainScene();
+
+  canvas.elt.addEventListener('pointerdown', onPointerDown, { passive: false });
+  canvas.elt.addEventListener('pointermove', onPointerMove, { passive: false });
+  canvas.elt.addEventListener('pointerup', onPointerUp, { passive: false });
+  canvas.elt.addEventListener('pointercancel', onPointerUp, { passive: false });
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+}
+
+function draw() {
+  const dt = min(deltaTime * 0.001, 0.05);
+  elapsed += dt;
+  gBloomOsc = sin(elapsed * 0.55) * 0.018; // 开放度呼吸
+  stageFlash = max(0, stageFlash - dt * 1.6);
+
+  updatePhysics(dt);
+  updateSpores(dt);
+  updateSealOrb(dt);
+
+  const t = currentTheme();
+  background(t.bg);
+  drawAmbientBackground();
+  drawFireflies();
+
+  // 主舞台：整花上下浮沉 = 呼吸
+  push();
+  translate(width * 0.5, height * 0.42 + sin(elapsed * 0.85) * 5);
+  renderHeads(flowerHeads, true);
+  pop();
+
+  renderSpores();
+  drawSealOrb();
+  drawShelfAndDomes();
+
+  if (stageFlash > 0) drawStageFlash();
+}
+
+function currentTheme() {
+  return SPECIES[params.species].themes[params.theme];
+}
+function themeOf(cfg) {
+  return SPECIES[cfg.species].themes[cfg.theme];
+}
+
+// =====================================================================
+// 花头构建：四品种共用一套配置 cfg
+// cfg = {species, theme, petals, size, width, ruffle, reflex, bloom}
+// =====================================================================
+function makeCfg(src) {
+  return {
+    species: src.species, theme: src.theme,
+    petals: src.petals, size: src.size, width: src.width,
+    ruffle: src.ruffle, reflex: src.reflex, bloom: src.bloom
+  };
+}
+
+function genRuffles(amp) {
+  // 222 的核心：每瓣顶端 9 个点的褶皱抖动；amp≈0 时退化为光滑杯弧
+  const r = [];
+  for (let i = 0; i <= 8; i++) r.push(1 + random(-1, 1) * 0.16 * amp);
+  return r;
+}
+
+function shadeRGB(rgbStr, f) {
+  return rgbStr.split(',').map(Number).map(v => Math.round(constrain(v * f, 0, 255))).join(',');
+}
+
+// 每瓣烘焙明暗抖动：纯螺旋让瓣缘散布在所有半径上，花瓣互相融成一坨；
+// 明暗自差异 + 环状同长瓣缘是让"一片一片"可读出来的关键
+function bakePetalColors(p, cfg) {
+  const t = themeOf(cfg);
+  const sh = random(0.90, 1.12);
+  p.cRoot = t.root;
+  p.cBase = shadeRGB(t.base, random(0.94, 1.06));
+  p.cMid = shadeRGB(t.mid, sh);
+  p.cTip = shadeRGB(t.tip, sh);
+  p.cEdge = shadeRGB(t.edge, random(0.95, 1.05));
+}
+
+function buildMainScene() {
+  flowerHeads = [];
+  spores = [];
+  const offsets = [
+    { x: 0, y: 0, z: 0, scale: 1.0, isBud: false },
+    { x: -120, y: 70, z: -30, scale: 0.68, isBud: false },
+    { x: 110, y: 100, z: -50, scale: 0.42, isBud: true }
+  ];
+  for (let f = 0; f < params.count; f++) {
+    const off = offsets[f];
+    flowerHeads.push(buildFlowerHead(makeCfg(params), off.x, off.y, off.z, off.scale, off.isBud));
+  }
+}
+
+function buildFlowerHead(cfg, offX, offY, offZ, scaleMult, isBud) {
+  const spec = SPECIES[cfg.species];
+  const head = {
+    cfg: cfg, offX, offY, offZ, scaleMult, isBud,
+    petals: [], stamens: [], filaments: [], sepals: [],
+    recoilForce: 0, recoilVel: 0,   // 整花级避让（牵牛花用）
+    seedPhase: random(TWO_PI)
+  };
+  const baseSize = cfg.size * scaleMult;
+
+  if (spec.structure === 'spiral') buildRosePetals(head, cfg, baseSize, isBud);
+  else if (spec.structure === 'layers') buildPeonyPetals(head, cfg, baseSize, isBud);
+  else if (spec.structure === 'spider') buildLycorisPetals(head, cfg, baseSize, isBud);
+  // trumpet 无离散花瓣，渲染时按整花绘制
+
+  if (spec.sepals && spec.structure !== 'trumpet') {
+    for (let i = 0; i < 5; i++) {
+      head.sepals.push({ type: 'sepal', angle: (i / 5) * TWO_PI + 0.2, length: baseSize * 0.52, offX, offY, offZ: offZ + 18 });
+    }
+  }
+  if (!isBud && spec.stamen === 'cluster') {
+    for (let i = 0; i < spec.stamenCount; i++) {
+      const a = random(TWO_PI), r = random(1, spec.structure === 'layers' ? 26 : 14);
+      head.stamens.push({
+        type: 'stamen',
+        x: offX + cos(a) * r, y: offY + sin(a) * r, z: offZ - random(6, 20),
+        len: random(6, spec.structure === 'layers' ? 16 : 12),
+        angle: a, tiltZ: random(0.1, 0.4)
+      });
+    }
+  }
+  if (!isBud && spec.stamen === 'filament') {
+    for (let i = 0; i < spec.stamenCount; i++) {
+      const a = (i / spec.stamenCount) * TWO_PI + random(-0.12, 0.12);
+      head.filaments.push({
+        type: 'filament', angle: a,
+        len: baseSize * random(1.7, 2.1),    // 细长花蕊伸出花冠
+        bend: random(0.35, 0.6),             // 上翘弧度
+        offX, offY, offZ: offZ - 10
+      });
+    }
+  }
+  return head;
+}
+
+// 🌹 玫瑰：222 验证过的三层环裙 + 111 黄金螺旋漩涡芯
+// 外 3 环 = 222 的层参数（lf=0 最外最平，越大越立）；芯 = 螺旋紧抱小瓣。
+function buildRosePetals(head, cfg, baseSize, isBud) {
+  const total = isBud ? Math.round(cfg.petals * 0.4) : cfg.petals;
+  const GOLDEN_ANGLE = 2.39996;
+  const coreCount = Math.max(6, Math.round(total * 0.30));
+
+  // 外裙 3 环（222 常数：lf=0 外环大且平，lf=1 内环小且立）
+  const ringTotal = total - coreCount;
+  const rings = 3;
+  const perRing = Math.max(4, Math.round(ringTotal / rings));
+  for (let k = 0; k < rings; k++) {
+    const lf = k / rings;  // 0, 0.33, 0.67 —— 留给芯最立的一段
+    const minR = baseSize * (1.1 - lf * 0.65) * 0.78;
+    const maxR = baseSize * (1.1 - lf * 0.65) * 1.08;
+    const ringOffset = k * 0.38;
+    for (let i = 0; i < perRing; i++) {
+      const p = {
+        type: 'petal', sp: 'spiral', t: 1 - lf,
+        angle: (i / perRing) * TWO_PI + ringOffset + random(-0.06, 0.06),
+        length: random(minR, maxR),
+        widthAngle: lerp(0.85, 0.50, lf),
+        cupTilt: lerp(0.38, 1.05, lf),
+        offZ: (0.5 - lf) * 26,
+        reflexRoll: (1 - lf) * (0.55 + cfg.reflex * 1.1),
+        ruffles: genRuffles(0.3 + cfg.ruffle * 0.25),
+        curl: random(-0.12, 0.12),
+        recoilForce: 0, recoilAngle: 0, velocity: 0, phase: random(TWO_PI)
+      };
+      bakePetalColors(p, cfg);
+      head.petals.push(p);
+    }
+  }
+
+  // 漩涡芯：黄金螺旋、紧抱小瓣（低伏贴合，正面可读漩涡）
+  for (let i = 0; i < coreCount; i++) {
+    const t = i / coreCount;
+    const p = {
+      type: 'petal', sp: 'spiral', t: t * 0.3,
+      angle: i * GOLDEN_ANGLE + random(-0.04, 0.04),
+      length: lerp(14, baseSize * 0.34, pow(t, 0.75)) * random(0.94, 1.06),
+      widthAngle: lerp(1.35, 0.95, t),
+      cupTilt: lerp(1.05, 0.72, t),
+      offZ: lerp(-16, -10, t),
+      reflexRoll: 0.05,
+      ruffles: genRuffles(0.25 + cfg.ruffle * 0.15),
+      curl: random(-0.08, 0.08),
+      recoilForce: 0, recoilAngle: 0, velocity: 0, phase: random(TWO_PI)
+    };
+    bakePetalColors(p, cfg);
+    head.petals.push(p);
+  }
+}
+
+// 🌸 牡丹：222 原生层常数（lf=0 外环大且平，lf=1 内环小且立）
+function buildPeonyPetals(head, cfg, baseSize, isBud) {
+  const total = isBud ? Math.round(cfg.petals * 0.4) : cfg.petals;
+  const layers = 4;
+  const perLayer = Math.max(4, Math.round(total / layers));
+  for (let layer = 0; layer < layers; layer++) {
+    const lf = layer / max(1, layers - 1);
+    const minR = baseSize * (1.1 - lf * 0.65) * 0.78;
+    const maxR = baseSize * (1.1 - lf * 0.65) * 1.08;
+    for (let i = 0; i < perLayer; i++) {
+      const p = {
+        type: 'petal', sp: 'layers', t: 1 - lf,
+        angle: (i / perLayer) * TWO_PI + layer * 0.38 + random(-0.06, 0.06),
+        length: random(minR, maxR),
+        widthAngle: lerp(0.90, 0.50, lf),
+        cupTilt: lerp(0.16, 0.88, lf),
+        offZ: (0.5 - lf) * 26,
+        reflexRoll: (1 - lf) * cfg.reflex * 0.7,
+        ruffles: genRuffles(cfg.ruffle * (1.3 - lf * 0.4)),
+        curl: random(-0.12, 0.12),
+        recoilForce: 0, recoilAngle: 0, velocity: 0, phase: random(TWO_PI)
+      };
+      bakePetalColors(p, cfg);
+      head.petals.push(p);
+    }
+  }
+}
+
+// 🕸️ 彼岸花：辐射长条瓣 + 强反卷 + 细长花蕊
+function buildLycorisPetals(head, cfg, baseSize, isBud) {
+  const n = isBud ? 5 : Math.round(map(cfg.petals, 10, 85, 6, 10, true));
+  for (let i = 0; i < n; i++) {
+    const p = {
+      type: 'petal', sp: 'spider', t: 0.5,
+      angle: (i / n) * TWO_PI + random(-0.09, 0.09),
+      length: baseSize * 1.15 * random(0.88, 1.12),
+      widthAngle: 0.18,
+      cupTilt: 0.6,
+      offZ: -4,
+      reflexRoll: 0.8 + cfg.reflex * 1.2,
+      ruffles: genRuffles(0.7 + cfg.ruffle * 0.6),  // 条状瓣皱波边（crisped）
+      curl: random(0.15, 0.35) * (i % 2 === 0 ? 1 : -1),
+      recoilForce: 0, recoilAngle: 0, velocity: 0, phase: random(TWO_PI)
+    };
+    bakePetalColors(p, cfg);
+    head.petals.push(p);
+  }
+}
+
+// =====================================================================
+// 3D 投影（固定相机）
+// =====================================================================
+function project3D(x, y, z) {
+  const cosY = cos(CAM_Y), sinY = sin(CAM_Y);
+  const x1 = x * cosY - z * sinY;
+  const z1 = x * sinY + z * cosY;
+  const cosX = cos(CAM_X), sinX = sin(CAM_X);
+  const y1 = y * cosX - z1 * sinX;
+  const z2 = y * sinX + z1 * cosX;
+  const fov = 620;
+  const scaleFactor = fov / (fov + z2 + 300);
+  return { sx: x1 * scaleFactor, sy: y1 * scaleFactor, sz: z2, scale: scaleFactor };
+}
+
+function liveBloom(cfg) {
+  return constrain(cfg.bloom + gBloomOsc, 0.05, 1);
+}
+
+function petalOpenAngle(p, cfg) {
+  const b = liveBloom(cfg);
+  if (p.sp === 'spider') return (0.50 - b * 0.95);          // 彼岸花：微拢 → 强反卷
+  return (1.20 - b * 0.85) * p.cupTilt;                     // 玫瑰/牡丹：杯状展开
+}
+
+function petalTip(p, cfg, len) {
+  const rad = p.angle + p.recoilAngle;
+  const openAngle = petalOpenAngle(p, cfg) + p.recoilForce * 0.35;
+  return {
+    x: cos(rad) * len * cos(openAngle * 0.5),
+    y: sin(rad) * len * cos(openAngle * 0.5),
+    z: -sin(openAngle) * len * 0.5 + p.offZ
+  };
+}
+
+// =====================================================================
+// 避让物理（保留）+ 牵牛花整花级避让
+// =====================================================================
+function updatePhysics(dt) {
+  flowerHeads.forEach(h => {
+    const cfg = h.cfg;
+    if (SPECIES[cfg.species].structure === 'trumpet') {
+      let target = 0;
+      if (touch3D.active && touch3D.force > 0.01 && params.flinch > 0) {
+        const d = dist(h.offX, h.offY, h.offZ, touch3D.x, touch3D.y, touch3D.z);
+        if (d < 150) target = pow(1 - d / 150, 2) * touch3D.force * params.flinch * 0.6;
+      }
+      const accel = (target - h.recoilForce) * 13.0;
+      h.recoilVel = (h.recoilVel + accel * dt) * 0.82;
+      h.recoilForce += h.recoilVel * dt;
+      if (target > 0.02 && random() < 0.25 && spores.length < 80) {
+        spawn3DSpore(h.offX + random(-40, 40), h.offY + random(-40, 40), h.offZ + 10, 0.6, themeOf(cfg));
+      }
+      return;
+    }
+    h.petals.forEach(p => {
+      const tip = petalTip(p, cfg, p.length);
+      const tipX = h.offX + tip.x, tipY = h.offY + tip.y, tipZ = h.offZ + tip.z;
+      let targetRecoil = 0, targetAngleShift = 0;
+      if (touch3D.active && touch3D.force > 0.01 && params.flinch > 0) {
+        const d = dist(tipX, tipY, tipZ, touch3D.x, touch3D.y, touch3D.z);
+        if (d < 140) {
+          const f = 1 - d / 140;
+          targetRecoil = f * f * touch3D.force * params.flinch * 0.45;
+          targetAngleShift = f * touch3D.force * params.flinch * 0.22;
+          if (random() < f * 0.30 && spores.length < 80) {
+            spawn3DSpore(tipX, tipY, tipZ, f, themeOf(cfg));
+          }
+        }
+      }
+      const accel = (targetRecoil - p.recoilForce) * 13.0;
+      p.velocity = (p.velocity + accel * dt) * 0.82;
+      p.recoilForce += p.velocity * dt;
+      p.recoilAngle = lerp(p.recoilAngle, targetAngleShift, 0.15);
+    });
+  });
+}
+
+function spawn3DSpore(x, y, z, intensity, t) {
+  const a = random(TWO_PI), elevation = random(-HALF_PI, HALF_PI);
+  const speed = random(15, 40) * intensity;
+  spores.push({
+    x, y, z,
+    vx: cos(a) * cos(elevation) * speed,
+    vy: sin(a) * cos(elevation) * speed,
+    vz: sin(elevation) * speed + random(6, 18),
+    life: 0, maxLife: random(1.2, 2.4),
+    size: random(1.5, 3.5),
+    colorRGB: random() > 0.4 ? t.spore1 : t.spore2
+  });
+}
+
+function updateSpores(dt) {
+  for (let i = spores.length - 1; i >= 0; i--) {
+    const s = spores[i];
+    s.life += dt;
+    if (s.life >= s.maxLife) { spores.splice(i, 1); continue; }
+    s.x += s.vx * dt; s.y += s.vy * dt; s.z += s.vz * dt;
+    s.vx *= 0.94; s.vy *= 0.94; s.vz *= 0.94;
+  }
+}
+
+// =====================================================================
+// 主舞台渲染（画家算法深度排序）
+// =====================================================================
+function renderHeads(heads, withShadow) {
+  const renderList = [];
+  heads.forEach(h => {
+    const cfg = h.cfg;
+    if (SPECIES[cfg.species].structure === 'trumpet') {
+      const proj = project3D(h.offX, h.offY, h.offZ);
+      renderList.push({ item: h, kind: 'trumpet', sz: proj.sz });
+      return;
+    }
+    h.sepals.forEach(sep => renderList.push({ item: sep, kind: 'sepal', head: h, sz: project3D(sep.offX, sep.offY, sep.offZ).sz }));
+    h.petals.forEach(p => {
+      const tip = petalTip(p, cfg, p.length * 0.5);
+      renderList.push({ item: p, kind: 'petal', head: h, sz: project3D(h.offX + tip.x, h.offY + tip.y, h.offZ + tip.z).sz });
+    });
+    h.stamens.forEach(s => renderList.push({ item: s, kind: 'stamen', head: h, sz: project3D(s.x, s.y, s.z).sz }));
+    h.filaments.forEach(f => renderList.push({ item: f, kind: 'filament', head: h, sz: project3D(f.offX, f.offY, f.offZ).sz - 1 }));
+  });
+  renderList.sort((a, b) => b.sz - a.sz);
+
+  if (withShadow) heads.forEach(h => drawCoreShadow(h));
+
+  renderList.forEach(e => {
+    if (e.kind === 'sepal') drawSepal(e.item, e.head);
+    else if (e.kind === 'petal') drawPetal(e.item, e.head);
+    else if (e.kind === 'stamen') drawStamen(e.item, e.head);
+    else if (e.kind === 'filament') drawFilament(e.item, e.head);
+    else if (e.kind === 'trumpet') drawTrumpet(e.item);
+  });
+}
+
+function drawCoreShadow(h) {
+  push();
+  translate(h.offX, h.offY);
+  noStroke();
+  const ctx = drawingContext;
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 100);
+  g.addColorStop(0, 'rgba(18,5,2,0.9)');
+  g.addColorStop(0.6, 'rgba(40,15,5,0.4)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ellipse(0, 0, 200, 160);
+  pop();
+}
+
+function drawAmbientBackground() {
+  const ctx = drawingContext;
+  noStroke();
+  // 夜空：上深蓝墨 → 下近黑
+  const sky = ctx.createLinearGradient(0, 0, 0, height);
+  sky.addColorStop(0, 'rgba(14,18,38,0.55)');
+  sky.addColorStop(0.45, 'rgba(8,8,22,0.30)');
+  sky.addColorStop(1, 'rgba(3,2,8,0.0)');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, width, height);
+  // 月光：顶部偏右一晕冷白（玻璃罩与花架的光源逻辑）
+  const moon = ctx.createRadialGradient(width * 0.66, -height * 0.08, 0, width * 0.66, -height * 0.08, max(width, height) * 0.55);
+  moon.addColorStop(0, 'rgba(190,215,255,0.14)');
+  moon.addColorStop(0.5, 'rgba(140,170,230,0.05)');
+  moon.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = moon;
+  ctx.fillRect(0, 0, width, height);
+  // 新月：晕心处一弯（暗盘咬出月牙）
+  const mx = width * 0.66, my = height * 0.11, mr = min(width, height) * 0.032;
+  const mglow = ctx.createRadialGradient(mx, my, 0, mx, my, mr * 3.4);
+  mglow.addColorStop(0, 'rgba(215,232,255,0.34)');
+  mglow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = mglow;
+  ctx.fillRect(mx - mr * 3.4, my - mr * 3.4, mr * 6.8, mr * 6.8);
+  noStroke();
+  fill(232, 242, 255, 225);
+  circle(mx, my, mr * 2);
+  fill(7, 9, 20, 245);
+  circle(mx + mr * 0.72, my - mr * 0.30, mr * 1.85);
+
+  // 星野：稀疏小星各自缓慢明灭
+  stars.forEach(st => {
+    const a = 0.28 + 0.45 * (0.5 + 0.5 * sin(elapsed * st.speed + st.phase));
+    fill(210, 228, 255, a * 255);
+    circle(st.u * width, st.v * height * 0.62, st.r);
+  });
+  // 暗角：视线收向花心
+  const vig = ctx.createRadialGradient(width * 0.5, height * 0.42, min(width, height) * 0.28, width * 0.5, height * 0.42, max(width, height) * 0.72);
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(2,1,8,0.42)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, width, height);
+}
+
+// 流萤：全屏缓慢漂移的荧光微尘（与罩中光尘、封存孢子同一语言）
+function drawFireflies() {
+  const ctx = drawingContext;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  fireflies.forEach(f => {
+    const x = f.u * width + sin(elapsed * f.drift + f.phase) * 46;
+    const y = f.v * height + cos(elapsed * f.drift * 0.7 + f.phase * 1.7) * 30;
+    const tw = 0.5 + 0.5 * sin(elapsed * f.tw + f.phase * 2.3);
+    const a = 0.10 + 0.30 * tw;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, 14);
+    g.addColorStop(0, f.warm ? `rgba(255,220,150,${a})` : `rgba(150,230,255,${a})`);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x - 14, y - 14, 28, 28);
+  });
+  ctx.restore();
+}
+
+// =====================================================================
+// 花瓣绘制：111 杯弧骨架 + 222 褶皱顶边 + 彼岸花侧卷
+// =====================================================================
+function drawPetal(p, head) {
+  const cfg = head.cfg, t = themeOf(cfg);
+  push();
+
+  const breath = sin(elapsed * 1.25 + p.phase * 0.3) * 0.018;
+  const recoilMult = 1 - p.recoilForce * 0.38;
+  const len = p.length * recoilMult * (1 + breath);
+  const halfW = (len * p.widthAngle * cfg.width) / 2;
+
+  const tip = petalTip(p, cfg, len);
+  const pBase = project3D(head.offX, head.offY, head.offZ + p.offZ);
+  const pTip = project3D(head.offX + tip.x, head.offY + tip.y, head.offZ + tip.z);
+
+  translate(pBase.sx, pBase.sy);
+  scale(pBase.scale);
+  rotate(atan2(pTip.sy - pBase.sy, pTip.sx - pBase.sx) + HALF_PI);
+
+  noStroke();
+  const ctx = drawingContext;
+  const grad = ctx.createLinearGradient(0, 0, 0, -len);
+  grad.addColorStop(0.00, `rgba(${p.cRoot},0.98)`);
+  grad.addColorStop(0.18, `rgba(${p.cBase},0.96)`);
+  grad.addColorStop(0.55, `rgba(${p.cMid},0.97)`);
+  grad.addColorStop(0.85, `rgba(${p.cTip},0.98)`);
+  grad.addColorStop(1.00, `rgba(${p.cEdge},1.0)`);
+  ctx.fillStyle = grad;
+
+  const reflex = p.reflexRoll * (1 + p.recoilForce * 0.4);
+  const curlOff = p.curl * len * 0.35;  // 彼岸花侧卷
+
+  if (p.sp === 'spiral') {
+    // 玫瑰花瓣：光滑边缘 + 瓣尖双圆鼓中央微凹（品种识别特征）
+    const rf = p.ruffles;
+    const w = halfW * (1 + reflex * 0.15);
+    beginShape();
+    vertex(0, 0);
+    // 左缘：基部收拢、上部鼓出
+    bezierVertex(-halfW * 0.52, -len * 0.20, -w * 1.05, -len * 0.58, -halfW * 0.66 * rf[2], -len * 0.88);
+    // 左圆鼓 → 中央微凹
+    quadraticVertex(-halfW * 0.42, -len * 1.03 * rf[4], 0, -len * (0.90 + reflex * 0.05));
+    // 中央微凹 → 右圆鼓
+    quadraticVertex(halfW * 0.42, -len * 1.03 * rf[6], halfW * 0.66 * rf[8], -len * 0.88);
+    // 右缘下行收回基部
+    bezierVertex(w * 1.05, -len * 0.58, halfW * 0.52, -len * 0.20, 0, 0);
+    endShape(CLOSE);
+    pop();
+    return;
+  }
+
+  if (p.sp === 'spider') {
+    // 彼岸花写实轮廓：细长瓣身沿长度波浪甩卷（crisped strap）
+    const sway = p.curl * len * 1.35;                 // 瓣尖侧甩量（方向随 curl 交替）
+    const wob = len * 0.055 * (0.6 + cfg.ruffle);     // 两侧皱波幅度
+    const rf = p.ruffles;
+    beginShape();
+    vertex(0, 0);
+    // 左缘：波浪上行，向甩卷方向渐弯
+    bezierVertex(
+      -halfW - wob * rf[1], -len * 0.22 + sway * 0.06,
+      -halfW * 0.6 + wob * rf[3], -len * 0.55 + sway * 0.28,
+      sway * 0.62, -len * 0.97
+    );
+    // 瓣尖：细锐小钩
+    quadraticVertex(sway * 0.72 + halfW * 0.18, -len * 1.01, sway * 0.80 + wob * rf[5] * 0.4, -len * 0.94);
+    // 右缘：波浪下行
+    bezierVertex(
+      halfW * 0.6 - wob * rf[6], -len * 0.60 + sway * 0.40,
+      halfW + wob * rf[8], -len * 0.24 + sway * 0.10,
+      0, 0
+    );
+    endShape(CLOSE);
+    pop();
+    return;
+  }
+
+  // 222 验证过的花瓣轮廓：侧弧收拢 + 顶端褶皱横贯
+  beginShape();
+  vertex(0, 0);
+  bezierVertex(
+    -halfW * 0.5, -len * 0.25,
+    -halfW * (1 + reflex * 0.2), -len * 0.65,
+    -halfW * 0.75 + curlOff * 0.4, -len * 0.98
+  );
+  const steps = p.ruffles.length - 1;
+  for (let i = 1; i < steps; i++) {
+    const k = i / steps;
+    const rx = lerp(-halfW * 0.75, halfW * 0.75, k) + curlOff * sin(k * HALF_PI);
+    const ry = -len * p.ruffles[i] * (1 + sin(k * PI) * 0.06);
+    curveVertex(rx, ry);
+  }
+  bezierVertex(
+    halfW * (1 + reflex * 0.2) + curlOff * 0.4, -len * 0.65,
+    halfW * 0.5, -len * 0.25,
+    0, 0
+  );
+  endShape(CLOSE);
+
+  // 外翻翘角亮弧
+  if (reflex > 0.18) {
+    stroke(255, 235, 200, 120 * reflex);
+    strokeWeight(1.1);
+    noFill();
+    beginShape();
+    vertex(-halfW * 0.2 + curlOff * 0.3, -len * 0.98);
+    quadraticVertex(-halfW * 0.75, -len * 0.93, -halfW * (0.80 + reflex * 0.15), -len * 0.78);
+    endShape();
+    beginShape();
+    vertex(halfW * 0.2 + curlOff * 0.3, -len * 0.98);
+    quadraticVertex(halfW * 0.75, -len * 0.93, halfW * (0.80 + reflex * 0.15), -len * 0.78);
+    endShape();
+  }
+  pop();
+}
+
+function drawSepal(sep, head) {
+  const t = themeOf(head.cfg);
+  push();
+  const pBase = project3D(sep.offX, sep.offY, sep.offZ);
+  const tipX = sep.offX + cos(sep.angle) * sep.length;
+  const tipY = sep.offY + sin(sep.angle) * sep.length;
+  const pTip = project3D(tipX, tipY, sep.offZ + 20);
+  translate(pBase.sx, pBase.sy);
+  scale(pBase.scale);
+  rotate(atan2(pTip.sy - pBase.sy, pTip.sx - pBase.sx) + HALF_PI);
+  noStroke();
+  fill(`rgba(${t.sepal},0.85)`);
+  const len = sep.length;
+  const w = len * 0.14;
+  beginShape();
+  vertex(0, 0);
+  bezierVertex(-w * 0.8, -len * 0.3, -w, -len * 0.7, 0, -len);
+  bezierVertex(w, -len * 0.7, w * 0.8, -len * 0.3, 0, 0);
+  endShape(CLOSE);
+  pop();
+}
+
+function drawStamen(s, head) {
+  const t = themeOf(head.cfg);
+  push();
+  const p1 = project3D(s.x, s.y, s.z);
+  const p2 = project3D(s.x + cos(s.angle) * s.len, s.y + sin(s.angle) * s.len, s.z - sin(s.tiltZ) * s.len);
+  stroke(t.stamen);
+  strokeWeight(1.1 * p1.scale);
+  line(p1.sx, p1.sy, p2.sx, p2.sy);
+  noStroke();
+  fill(t.stamen);
+  ellipse(p2.sx, p2.sy, 3.0 * p2.scale, 3.0 * p2.scale);
+  pop();
+}
+
+// 彼岸花细长花蕊：伸出花冠的弧线 + 顶端花药
+function drawFilament(f, head) {
+  const t = themeOf(head.cfg);
+  const sway = sin(elapsed * 0.9 + f.angle * 3) * 0.03;
+  const a = f.angle + sway;
+  const p0 = project3D(f.offX, f.offY, f.offZ);
+  const midR = f.len * 0.42;
+  const p1 = project3D(f.offX + cos(a) * midR, f.offY + sin(a) * midR, f.offZ + f.len * f.bend);
+  const p2 = project3D(f.offX + cos(a) * f.len, f.offY + sin(a) * f.len, f.offZ + f.len * f.bend * 1.15);
+  push();
+  stroke(t.stamen);
+  strokeWeight(1.2 * p0.scale);
+  noFill();
+  beginShape();
+  vertex(p0.sx, p0.sy);
+  quadraticVertex(p1.sx, p1.sy, p2.sx, p2.sy);
+  endShape();
+  noStroke();
+  fill(t.stamen);
+  ellipse(p2.sx, p2.sy, 3.4 * p2.scale, 2.2 * p2.scale);
+  pop();
+}
+
+// 🎺 牵牛花：五角星盘 + 放射褶皱 + 白色喉部星斑（整花绘制）
+function drawTrumpet(head) {
+  const cfg = head.cfg, t = themeOf(cfg);
+  const breath = 1 + sin(elapsed * 1.1 + head.seedPhase) * 0.02;
+  const R = cfg.size * (0.55 + liveBloom(cfg) * 0.5) * (1 - head.recoilForce * 0.3) * breath;
+  const c = project3D(head.offX, head.offY, head.offZ);
+
+  push();
+  translate(c.sx, c.sy);
+  scale(c.scale);
+  rotate(sin(elapsed * 0.4 + head.seedPhase) * 0.02); // 极轻微摆动，非旋转视角
+  noStroke();
+  const ctx = drawingContext;
+
+  // 喇叭管：从喉部向后下方延伸的漏斗管（品种识别特征）
+  const tubeLen = R * 1.5;
+  const tubeW0 = R * 0.34, tubeW1 = R * 0.08;
+  const bendX = R * 0.16;
+  const tg = ctx.createLinearGradient(0, 0, bendX, tubeLen);
+  tg.addColorStop(0.00, `rgba(${t.mid},0.96)`);
+  tg.addColorStop(0.38, `rgba(${t.tip},0.94)`);
+  tg.addColorStop(0.80, `rgba(${t.edge},0.90)`);
+  tg.addColorStop(1.00, `rgba(${t.sepal},0.85)`);
+  ctx.fillStyle = tg;
+  beginShape();
+  vertex(-tubeW0, R * 0.30);
+  bezierVertex(-tubeW0 * 0.55, tubeLen * 0.40, -tubeW1 * 1.5 + bendX * 0.5, tubeLen * 0.76, -tubeW1 + bendX, tubeLen);
+  quadraticVertex(bendX, tubeLen + R * 0.055, tubeW1 + bendX, tubeLen);
+  bezierVertex(tubeW1 * 1.5 + bendX * 0.5, tubeLen * 0.76, tubeW0 * 0.55, tubeLen * 0.40, tubeW0, R * 0.30);
+  endShape(CLOSE);
+  // 管身纵棱（漏斗的褶皱感）
+  stroke(`rgba(${t.root},0.30)`);
+  strokeWeight(1);
+  for (let k = -1; k <= 1; k++) {
+    line(k * tubeW0 * 0.45, R * 0.34, bendX + k * tubeW1 * 0.5, tubeLen * 0.92);
+  }
+  noStroke();
+  // 管底萼片小星（托在喇叭管末端）
+  fill(`rgba(${t.sepal},0.85)`);
+  push();
+  translate(bendX, tubeLen);
+  for (let k = 0; k < 5; k++) {
+    const a = k / 5 * TWO_PI - HALF_PI;
+    push();
+    rotate(a);
+    beginShape();
+    vertex(0, 0);
+    vertex(-R * 0.055, R * 0.22);
+    vertex(0, R * 0.15);
+    vertex(R * 0.055, R * 0.22);
+    endShape(CLOSE);
+    pop();
+  }
+  pop();
+
+  // 花盘微倾：压扁成椭圆 + 盘上移，露出喇叭管 = 3/4 视角
+  translate(0, -R * 0.32);
+  scale(1, 0.85);
+
+  // 花盘：喉部白 → 中段主色 → 边缘略深
+  const g = ctx.createRadialGradient(0, 0, R * 0.04, 0, 0, R);
+  g.addColorStop(0.00, `rgba(${t.edge},0.98)`);
+  g.addColorStop(0.20, `rgba(${t.tip},0.97)`);
+  g.addColorStop(0.60, `rgba(${t.mid},0.97)`);
+  g.addColorStop(1.00, `rgba(${t.base},0.95)`);
+  ctx.fillStyle = g;
+
+  // 五裂波浪边缘
+  beginShape();
+  for (let a = 0; a <= TWO_PI + 0.06; a += 0.06) {
+    const lobe = 1 + 0.07 * cos(5 * a);
+    const ruf = 1 + cfg.ruffle * 0.05 * sin(a * 23 + head.seedPhase);
+    curveVertex(cos(a) * R * lobe * ruf, sin(a) * R * lobe * ruf);
+  }
+  endShape(CLOSE);
+
+  // 放射褶皱：谷深脊浅
+  for (let k = 0; k < 5; k++) {
+    const va = (2 * k + 1) / 10 * TWO_PI - HALF_PI;  // 谷
+    stroke(`rgba(${t.root},0.5)`);
+    strokeWeight(1.2);
+    line(cos(va) * R * 0.15, sin(va) * R * 0.15, cos(va) * R * 0.92, sin(va) * R * 0.92);
+    const ra = k / 5 * TWO_PI - HALF_PI;             // 脊
+    stroke(`rgba(${t.edge},0.35)`);
+    strokeWeight(1.0);
+    line(cos(ra) * R * 0.18, sin(ra) * R * 0.18, cos(ra) * R * 0.95, sin(ra) * R * 0.95);
+  }
+
+  // 喉部白星 + 花心
+  noStroke();
+  const ctx2 = drawingContext;
+  ctx2.save();
+  ctx2.shadowColor = `rgba(${t.edge},0.9)`;
+  ctx2.shadowBlur = 14;
+  fill(`rgba(${t.edge},0.95)`);
+  beginShape();
+  for (let k = 0; k < 10; k++) {
+    const a = k / 10 * TWO_PI - HALF_PI;
+    const r = k % 2 === 0 ? R * 0.16 : R * 0.07;
+    vertex(cos(a) * r, sin(a) * r);
+  }
+  endShape(CLOSE);
+  ctx2.restore();
+  fill(t.stamen);
+  ellipse(0, 0, R * 0.05, R * 0.05);
+  pop();
+}
+
+function renderSpores() {
+  spores.forEach(s => {
+    const p = project3D(s.x, s.y, s.z);
+    const alpha = sin((s.life / s.maxLife) * PI) * 220;
+    noStroke();
+    fill(`rgba(${s.colorRGB},${alpha / 255})`);
+    ellipse(p.sx, p.sy, s.size * p.scale, s.size * p.scale * 0.85);
+  });
+}
+
+// =====================================================================
+// 🏺 永生花系统：玻璃罩 + 荧光花架 + 持久化
+// =====================================================================
+function domeLayout() {
+  // 花架顶部 y；罩子坐在架上
+  const shelfY = height - 64;
+  const n = domes.length;
+  const spacing = n > 0 ? min(150, (width - 100) / max(n, 1)) : 150;
+  const startX = width / 2 - (n - 1) * spacing / 2;
+  return { shelfY, spacing, startX };
+}
+
+function nextDomeX() {
+  const { spacing, startX } = domeLayout();
+  return domes.length < MAX_DOMES
+    ? width / 2 - (domes.length) * spacing / 2 + domes.length * spacing
+    : startX;
+}
+
+function startSeal() {
+  if (sealOrb) return;
+  ensureAudio();
+  playBell(432, 0.10);
+  const cfg = makeCfg(params);
+  const d = new Date();
+  sealOrb = {
+    cfg, t: 0, dur: 1.35,
+    fromX: width * 0.5, fromY: height * 0.42,
+    toX: nextDomeX(), toY: height - 64 - 118,
+    date: `${d.getMonth() + 1}.${d.getDate()}`,
+    trail: []
+  };
+  document.getElementById('btn-seal').classList.add('sealing');
+}
+
+function updateSealOrb(dt) {
+  if (!sealOrb) return;
+  sealOrb.t += dt / sealOrb.dur;
+  // 拖尾孢子
+  if (random() < 0.6) {
+    const p = easeInOut(min(sealOrb.t, 1));
+    const x = lerp(sealOrb.fromX, sealOrb.toX, p) + random(-6, 6);
+    const y = lerp(sealOrb.fromY, sealOrb.toY, p) + random(-6, 6) - sin(p * PI) * 60;
+    sealOrb.trail.push({ x, y, life: 0, maxLife: random(0.4, 0.9), size: random(1.5, 3) });
+  }
+  for (let i = sealOrb.trail.length - 1; i >= 0; i--) {
+    sealOrb.trail[i].life += dt;
+    if (sealOrb.trail[i].life >= sealOrb.trail[i].maxLife) sealOrb.trail.splice(i, 1);
+  }
+  if (sealOrb.t >= 1) {
+    const cfg = sealOrb.cfg;
+    if (domes.length >= MAX_DOMES) domes.shift();   // 满架：最早的化作星光
+    domes.push({
+      cfg, date: sealOrb.date,
+      head: buildFlowerHead(cfg, 0, 0, 0, 1, false),
+      seed: random(1000), born: elapsed
+    });
+    sealOrb = null;
+    playBell(864, 0.07);
+    document.getElementById('btn-seal').classList.remove('sealing');
+  }
+}
+
+function easeInOut(x) { return x < 0.5 ? 2 * x * x : 1 - pow(-2 * x + 2, 2) / 2; }
+
+function drawSealOrb() {
+  if (!sealOrb) return;
+  const t = themeOf(sealOrb.cfg);
+  const p = easeInOut(min(sealOrb.t, 1));
+  const x = lerp(sealOrb.fromX, sealOrb.toX, p);
+  const y = lerp(sealOrb.fromY, sealOrb.toY, p) - sin(p * PI) * 60;
+  const ctx = drawingContext;
+
+  // 拖尾
+  sealOrb.trail.forEach(s => {
+    const a = sin((s.life / s.maxLife) * PI) * 0.8;
+    noStroke();
+    fill(`rgba(${t.spore1},${a})`);
+    ellipse(s.x, s.y, s.size, s.size);
+  });
+
+  // 精华球
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const g = ctx.createRadialGradient(x, y, 0, x, y, 26);
+  g.addColorStop(0, `rgba(${t.tip},0.85)`);
+  g.addColorStop(0.4, `rgba(${t.mid},0.35)`);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(x - 26, y - 26, 52, 52);
+  ctx.restore();
+  noStroke();
+  fill(`rgba(${t.edge},0.95)`);
+  ellipse(x, y, 7, 7);
+}
+
+// --- 玻璃罩绘制（移植自 tidal-moon-moss 管线，参数化尺寸） ---
+function defineDomePath(ctx, cx, baseY, w, h) {
+  const l = cx - w / 2, r = cx + w / 2, top = baseY - h;
+  ctx.beginPath();
+  ctx.moveTo(l + w * 0.06, baseY);
+  ctx.bezierCurveTo(l - w * 0.02, baseY - h * 0.28, l + w * 0.03, top + h * 0.35, cx - w * 0.22, top + h * 0.08);
+  ctx.bezierCurveTo(cx - w * 0.08, top - h * 0.03, cx + w * 0.08, top - h * 0.03, cx + w * 0.22, top + h * 0.08);
+  ctx.bezierCurveTo(r - w * 0.03, top + h * 0.35, r + w * 0.02, baseY - h * 0.28, r - w * 0.06, baseY);
+  ctx.bezierCurveTo(r - w * 0.12, baseY + h * 0.045, l + w * 0.12, baseY + h * 0.045, l + w * 0.06, baseY);
+  ctx.closePath();
+}
+
+function drawShelfAndDomes() {
+  if (domes.length === 0 && !sealOrb) return;
+  const { shelfY, spacing, startX } = domeLayout();
+  const ctx = drawingContext;
+
+  // --- 荧光花架 ---
+  const barL = max(40, startX - 95), barR = min(width - 40, startX + (domes.length - 1) * spacing + 95);
+  // 架下光晕
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const glow = ctx.createRadialGradient(width / 2, shelfY + 10, 0, width / 2, shelfY + 10, (barR - barL) * 0.7);
+  glow.addColorStop(0, 'rgba(119,215,255,0.26)');
+  glow.addColorStop(0.6, 'rgba(119,215,255,0.10)');
+  glow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(barL - 60, shelfY - 30, (barR - barL) + 120, 130);
+  ctx.restore();
+  // 玻璃架面
+  const barGrad = ctx.createLinearGradient(barL, shelfY, barL, shelfY + 16);
+  barGrad.addColorStop(0, 'rgba(180,240,250,0.42)');
+  barGrad.addColorStop(0.5, 'rgba(246,255,255,0.24)');
+  barGrad.addColorStop(1, 'rgba(30,70,96,0.50)');
+  ctx.fillStyle = barGrad;
+  ctx.beginPath();
+  ctx.roundRect(barL, shelfY, barR - barL, 16, 8);
+  ctx.fill();
+  // 荧光边缘（宽低亮 + 窄高亮双层）
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  stroke(140, 225, 255, 130);
+  strokeWeight(7);
+  line(barL + 6, shelfY + 1, barR - 6, shelfY + 1);
+  stroke(220, 250, 255, 235);
+  strokeWeight(2);
+  line(barL + 6, shelfY + 1, barR - 6, shelfY + 1);
+  // 架面下沿的荧光拖尾
+  stroke(119, 215, 255, 70);
+  strokeWeight(3);
+  line(barL + 10, shelfY + 14, barR - 10, shelfY + 14);
+  ctx.restore();
+
+  // --- 逐个玻璃罩 ---
+  domes.forEach((d, i) => {
+    drawDome(d, startX + i * spacing, shelfY - 2);
+  });
+}
+
+function drawDome(d, cx, baseY) {
+  const w = 118, h = 158;
+  const ctx = drawingContext;
+  const t = themeOf(d.cfg);
+  const age = elapsed - d.born;
+  const appear = constrain(age / 0.8, 0, 1);   // 落架淡入
+  const haloPulse = 0.10 + 0.05 * sin(elapsed * 0.7 + d.seed);
+
+  ctx.save();
+  ctx.globalAlpha = appear;
+
+  // ===== 罩内场景（clip 裁切） =====
+  ctx.save();
+  defineDomePath(ctx, cx, baseY, w, h);
+  ctx.clip();
+
+  // 罩内暗色底 + 品种色光晕
+  const bg = ctx.createLinearGradient(0, baseY - h, 0, baseY);
+  bg.addColorStop(0, 'rgba(10,16,30,0.55)');
+  bg.addColorStop(1, 'rgba(5,8,14,0.85)');
+  ctx.fillStyle = bg;
+  ctx.fillRect(cx - w / 2 - 4, baseY - h - 4, w + 8, h + 8);
+  ctx.globalCompositeOperation = 'lighter';
+  const halo = ctx.createRadialGradient(cx, baseY - h * 0.62, 4, cx, baseY - h * 0.62, w * 0.62);
+  halo.addColorStop(0, `rgba(${t.tip},${haloPulse + 0.08})`);
+  halo.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = halo;
+  ctx.fillRect(cx - w * 0.62, baseY - h * 1.24, w * 1.24, h);
+  ctx.globalCompositeOperation = 'source-over';
+
+  // 花茎
+  stroke(`rgba(${t.sepal},0.9)`);
+  strokeWeight(2);
+  line(cx, baseY - 6, cx, baseY - h * 0.30);
+
+  // 罩中花（慢速呼吸，不再避让）
+  push();
+  translate(cx, baseY - h * 0.30 + sin(elapsed * 0.55 + d.seed) * 2.2);
+  scale(0.30);
+  renderHeads([d.head], false);
+  pop();
+
+  // 悬浮微光尘
+  for (let k = 0; k < 6; k++) {
+    const h1 = sin(d.seed * 12.9898 + k * 78.233) * 43758.5453;
+    const h2 = sin(d.seed * 39.346 + k * 11.135) * 24634.6345;
+    const mx = cx + (h1 - floor(h1) - 0.5) * w * 0.55;
+    const speed = 6 + (h2 - floor(h2)) * 8;
+    const my = baseY - 12 - ((elapsed * speed + (h1 - floor(h1)) * h) % (h * 0.75));
+    noStroke();
+    fill(`rgba(${t.spore2},${0.35 + 0.25 * sin(elapsed + k)})`);
+    ellipse(mx, my, 1.8, 1.8);
+  }
+  ctx.restore();
+
+  // ===== 玻璃体（screen 混合高光） =====
+  ctx.save();
+  defineDomePath(ctx, cx, baseY, w, h);
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = 'rgba(167,236,255,0.35)';
+  ctx.stroke();
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = 'rgba(245,255,255,0.85)';
+  ctx.stroke();
+  ctx.globalCompositeOperation = 'screen';
+  defineDomePath(ctx, cx, baseY, w, h);
+  ctx.clip();
+  // 右侧主反光弧
+  ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(cx + w * 0.30, baseY - h * 0.92);
+  ctx.bezierCurveTo(cx + w * 0.44, baseY - h * 0.62, cx + w * 0.44, baseY - h * 0.28, cx + w * 0.34, baseY - h * 0.06);
+  ctx.stroke();
+  // 左侧次反光弧
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(cx - w * 0.30, baseY - h * 0.90);
+  ctx.bezierCurveTo(cx - w * 0.44, baseY - h * 0.60, cx - w * 0.42, baseY - h * 0.30, cx - w * 0.34, baseY - h * 0.08);
+  ctx.stroke();
+  ctx.restore();
+
+  // ===== 亚克力底座 =====
+  ctx.save();
+  const pedH = 20;
+  const body = ctx.createLinearGradient(cx - w * 0.52, baseY, cx + w * 0.52, baseY + pedH);
+  body.addColorStop(0, 'rgba(30,68,76,0.25)');
+  body.addColorStop(0.3, 'rgba(156,230,238,0.22)');
+  body.addColorStop(0.6, 'rgba(246,255,255,0.45)');
+  body.addColorStop(1, 'rgba(18,40,56,0.35)');
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.moveTo(cx - w * 0.46, baseY + 2);
+  ctx.bezierCurveTo(cx - w * 0.2, baseY + pedH * 0.5, cx + w * 0.2, baseY + pedH * 0.5, cx + w * 0.46, baseY + 2);
+  ctx.lineTo(cx + w * 0.46, baseY + pedH * 0.7);
+  ctx.bezierCurveTo(cx + w * 0.2, baseY + pedH * 1.15, cx - w * 0.2, baseY + pedH * 1.15, cx - w * 0.46, baseY + pedH * 0.7);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(246,255,255,0.7)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.ellipse(cx, baseY + 2, w * 0.46, 5, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  // ===== 铭牌：品种 + 封存日期 =====
+  ctx.save();
+  ctx.globalAlpha = appear * 0.9;
+  ctx.shadowColor = `rgba(${t.tip},0.8)`;
+  ctx.shadowBlur = 6;
+  fill(240, 246, 255, 220);
+  noStroke();
+  textAlign(CENTER, TOP);
+  textSize(10);
+  text(`${SPECIES[d.cfg.species].name} · ${d.date}`, cx, baseY + 26);
+  ctx.restore();
+
+  // 落架闪光
+  if (appear < 1) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const fg = ctx.createRadialGradient(cx, baseY - h * 0.5, 0, cx, baseY - h * 0.5, w);
+    fg.addColorStop(0, `rgba(${t.tip},${(1 - appear) * 0.5})`);
+    fg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = fg;
+    ctx.fillRect(cx - w, baseY - h * 1.5, w * 2, h * 1.5);
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
+function drawStageFlash() {
+  const ctx = drawingContext;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const g = ctx.createRadialGradient(width / 2, height * 0.42, 0, width / 2, height * 0.42, 240);
+  g.addColorStop(0, `rgba(255,240,200,${stageFlash * 0.25})`);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, width, height);
+  ctx.restore();
+}
+
+
+// --- 点击罩子取回配方 ---
+function hitTestDome(px, py) {
+  const { shelfY, spacing, startX } = domeLayout();
+  for (let i = domes.length - 1; i >= 0; i--) {
+    const cx = startX + i * spacing;
+    if (abs(px - cx) < 70 && py > shelfY - 175 && py < shelfY + 45) return domes[i];
+  }
+  return null;
+}
+
+function restoreFromDome(d) {
+  params.species = d.cfg.species;
+  params.theme = d.cfg.theme;
+  params.petals = d.cfg.petals;
+  params.size = d.cfg.size;
+  params.width = d.cfg.width;
+  params.ruffle = d.cfg.ruffle;
+  params.reflex = d.cfg.reflex;
+  params.bloom = d.cfg.bloom;
+
+  document.getElementById('param-species').value = params.species;
+  rebuildThemeOptions(params.species, params.theme);
+  syncSlidersFromParams();
+  readParamsFromUI();
+  buildMainScene();
+  stageFlash = 1;
+  playBell(648, 0.05);
+}
+
+// =====================================================================
+// 音效：Web Audio 波铃（移植自 tidal-moon-moss，精简版）
+// =====================================================================
+function ensureAudio() {
+  if (!audioCtx) {
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { }
+  }
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+}
+
+function playBell(root, vol) {
+  if (!audioCtx) return;
+  const now = audioCtx.currentTime;
+  [[root, 1.0], [root * 0.5, 0.5], [root * 1.5, 0.22]].forEach(([f, g]) => {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = f;
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.linearRampToValueAtTime(vol * g, now + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 2.2);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(now);
+    osc.stop(now + 2.4);
+  });
+}
+
+// =====================================================================
+// UI 绑定
+// =====================================================================
+function rebuildThemeOptions(species, selected) {
+  const sel = document.getElementById('param-theme');
+  sel.innerHTML = '';
+  Object.entries(SPECIES[species].themes).forEach(([key, th]) => {
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = th.label;
+    sel.appendChild(opt);
+  });
+  sel.value = SPECIES[species].themes[selected] ? selected : Object.keys(SPECIES[species].themes)[0];
+}
+
+function onSpeciesChange() {
+  const sp = document.getElementById('param-species').value;
+  rebuildThemeOptions(sp, null);
+  onParamChange();
+}
+
+// URL 参数配方：?species=peony&theme=zhaofen&petals=60&bloom=80...（可分享）
+function applyURLParams() {
+  const q = new URLSearchParams(location.search);
+  if (q.has('species') && SPECIES[q.get('species')]) {
+    document.getElementById('param-species').value = q.get('species');
+    rebuildThemeOptions(q.get('species'), null);
+  }
+  if (q.has('theme')) {
+    const sel = document.getElementById('param-theme');
+    if ([...sel.options].some(o => o.value === q.get('theme'))) sel.value = q.get('theme');
+  }
+  ['size', 'width', 'ruffle', 'reflex', 'bloom', 'flinch'].forEach(id => {
+    if (q.has(id)) document.getElementById(`param-${id}`).value = q.get(id);
+  });
+  // 演示/测试：?autoseal=N 自动封存 N 朵（间隔 1.7s）
+  if (q.has('autoseal')) {
+    const n = constrain(int(q.get('autoseal')) || 1, 1, 8);
+    for (let i = 0; i < n; i++) setTimeout(() => { onParamChange(); startSeal(); }, 400 + i * 1700);
+  }
+  // 演示/测试：?instaseal=N 直接落架 N 朵（跳过飞行动画）
+  if (q.has('instaseal')) {
+    const n = constrain(int(q.get('instaseal')) || 1, 1, 8);
+    for (let i = 0; i < n; i++) {
+      onParamChange();
+      const cfg = makeCfg(params);
+      domes.push({ cfg, date: '8.6', head: buildFlowerHead(cfg, 0, 0, 0, 1, false), seed: random(1000), born: elapsed - 1 });
+    }
+  }
+}
+
+function bindUIEvents() {
+  const container = document.getElementById('ui-container');
+  container.addEventListener('pointerdown', e => e.stopPropagation());
+  container.addEventListener('pointermove', e => e.stopPropagation());
+  container.addEventListener('pointerup', e => e.stopPropagation());
+
+  ['size', 'width', 'ruffle', 'reflex', 'bloom', 'flinch'].forEach(id => {
+    document.getElementById(`param-${id}`).addEventListener('input', () => {
+      readParamsFromUI();
+      buildMainScene();
+    });
+  });
+}
+
+function syncSlidersFromParams() {
+  document.getElementById('param-size').value = params.size;
+  document.getElementById('param-width').value = params.width;
+  document.getElementById('param-ruffle').value = params.ruffle;
+  document.getElementById('param-reflex').value = params.reflex;
+  document.getElementById('param-bloom').value = Math.round(params.bloom * 100);
+  document.getElementById('param-flinch').value = params.flinch;
+}
+
+function readParamsFromUI() {
+  params.species = document.getElementById('param-species').value;
+  params.theme = document.getElementById('param-theme').value;
+  params.petals = SPECIES[params.species].defPetals || 45;
+  params.size = parseInt(document.getElementById('param-size').value);
+  params.width = parseFloat(document.getElementById('param-width').value);
+  params.ruffle = parseFloat(document.getElementById('param-ruffle').value);
+  params.reflex = parseFloat(document.getElementById('param-reflex').value);
+  params.bloom = parseInt(document.getElementById('param-bloom').value) / 100;
+  params.flinch = parseFloat(document.getElementById('param-flinch').value);
+
+  document.getElementById('val-size').innerText = params.size;
+  document.getElementById('val-width').innerText = params.width.toFixed(2);
+  document.getElementById('val-ruffle').innerText = params.ruffle.toFixed(2);
+  document.getElementById('val-reflex').innerText = params.reflex.toFixed(2);
+  document.getElementById('val-bloom').innerText = Math.round(params.bloom * 100) + '%';
+  document.getElementById('val-flinch').innerText = params.flinch.toFixed(2);
+}
+
+function onParamChange() {
+  readParamsFromUI();
+  buildMainScene();
+}
+
+function randomizeParams() {
+  const speciesKeys = Object.keys(SPECIES);
+  const sp = speciesKeys[Math.floor(random(speciesKeys.length))];
+  document.getElementById('param-species').value = sp;
+  rebuildThemeOptions(sp, null);
+
+  const themeKeys = Object.keys(SPECIES[sp].themes);
+  document.getElementById('param-theme').value = themeKeys[Math.floor(random(themeKeys.length))];
+  document.getElementById('param-size').value = Math.floor(random(120, 185));
+  document.getElementById('param-width').value = random(0.8, 1.25).toFixed(2);
+  document.getElementById('param-ruffle').value = random(0.3, 0.95).toFixed(2);
+  document.getElementById('param-reflex').value = random(0.3, 0.9).toFixed(2);
+  document.getElementById('param-bloom').value = Math.floor(random(45, 90));
+  onParamChange();
+}
+
+function toggleUI() {
+  const body = document.getElementById('ui-body');
+  const btn = document.getElementById('toggle-btn');
+  body.classList.toggle('collapsed');
+  btn.innerText = body.classList.contains('collapsed') ? '+' : '—';
+}
+
+// =====================================================================
+// 指针交互：点罩取回 > 花瓣避让（无旋转）
+// =====================================================================
+function onPointerDown(e) {
+  e.preventDefault();
+  ensureAudio();
+  const hit = hitTestDome(e.clientX, e.clientY);
+  if (hit) { restoreFromDome(hit); return; }
+  updateTouch3D(e.clientX, e.clientY);
+}
+
+function onPointerMove(e) {
+  e.preventDefault();
+  if (touch3D.active) updateTouch3D(e.clientX, e.clientY);
+}
+
+function onPointerUp(e) {
+  e.preventDefault();
+  touch3D.active = false;
+}
+
+function updateTouch3D(screenX, screenY) {
+  touch3D.x = screenX - width / 2;
+  touch3D.y = screenY - height * 0.42;
+  touch3D.z = 0;
+  touch3D.active = true;
+  touch3D.force = 1.0;
+}
+</script>
+</body>
+</html>
