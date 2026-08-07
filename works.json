@@ -191,6 +191,41 @@
   },
   "works": [
     {
+      "slug": "eternal-bloom",
+      "title_en": "Eternal Bloom",
+      "title_zh": "永生花工坊",
+      "tagline": "调好一朵花的每个参数，封进玻璃钟罩，它就替你一直开着。",
+      "tech": [
+        "p5.js",
+        "Canvas 2D",
+        "Web Audio API"
+      ],
+      "render": "Canvas2D (p5.js)",
+      "has_audio": true,
+      "has_touch": true,
+      "particle_count": "N/A",
+      "dependencies": 1,
+      "healing_domain": "meditation",
+      "keywords": [
+        "p5.js",
+        "canvas 2d",
+        "web audio api",
+        "touch interaction"
+      ],
+      "use_cases": [
+        "p5.js",
+        "canvas 2d",
+        "web audio api",
+        "touch interaction"
+      ],
+      "files": [
+        "eternal-bloom.html",
+        "eternal-bloom.md",
+        "eternal-bloom_1.gif"
+      ],
+      "date": "2026-08-07"
+    },
+    {
       "slug": "sealed-summer-jar",
       "title_en": "Sealed Summer Jar",
       "title_zh": "封存的四点钟",
@@ -1289,41 +1324,6 @@
         "layered-mountains.jpg"
       ],
       "date": "2026-06-11"
-    },
-    {
-      "slug": "eternal-bloom",
-      "title_en": "Eternal Bloom",
-      "title_zh": "永生花工坊",
-      "tagline": "调好一朵花的每个参数，封进玻璃钟罩，它就替你一直开着。",
-      "tech": [
-        "p5.js",
-        "Canvas 2D",
-        "Web Audio API"
-      ],
-      "render": "Canvas2D (p5.js)",
-      "has_audio": true,
-      "has_touch": true,
-      "particle_count": "N/A",
-      "dependencies": 1,
-      "healing_domain": "meditation",
-      "keywords": [
-        "p5.js",
-        "canvas 2d",
-        "web audio api",
-        "touch interaction"
-      ],
-      "use_cases": [
-        "p5.js",
-        "canvas 2d",
-        "web audio api",
-        "touch interaction"
-      ],
-      "files": [
-        "eternal-bloom.html",
-        "eternal-bloom.md",
-        "eternal-bloom_1.gif"
-      ],
-      "date": "2026-08-07"
     }
   ]
 }
