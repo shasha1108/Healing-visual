@@ -72,7 +72,7 @@ const rng = mulberry32(SEED);
 const rnd = (a, b) => a + rng() * (b - a);
 
 // ================= 全局状态 =================
-const TILT = -0.5;            // 弧度，负 = 上方向左倾（渲染层 only）
+const TILT = -0.8;            // 弧度，负 = 上方向左倾（渲染层 only）；半漂浮瓶：瓶口贴河面
 const N_BOATS = 7;            // 瓶内目标船数（世界守恒）
 const WATERY_U = 60;          // 瓶内水面高度（单位空间）
 
@@ -88,14 +88,23 @@ let foldTimer = rnd(10, 15);  // 折船再生计时（10-15s）
 let foldState = null;         // { t: 0→1 } 折纸动画
 let escCount = 0;             // 已放行计数（音阶顺序拾音）
 let hintFaded = false;
+let waterG = null;            // 流场水丝离屏缓冲（半分辨率，拖尾累积成丝绸纹）
+let waterPts = [];            // 流场粒子：冷色月光丝 + 暖色灯影丝
+let waterZt = 0;              // 噪声场时间轴
 
 // ================= 几何（单位空间 × k，抄 glass-bottle-kit） =================
 function buildGeom() {
-  // k 由旋转后包围盒反推：TILT=-0.5 时水平半幅 185（单位空间）、垂直半幅 217。
-  // 窄屏由宽度主导（手机竖屏必触），宽屏由高度/780 上限主导。
-  const k = Math.min(windowWidth * 0.90 / 370, windowHeight * 0.86 / 434, 780 / 400);
+  // 半浮构图：瓶口唇 (0,-170k) 贴河面 riverY+6，瓶底没入水下（前层水覆盖）。
+  // k 由 TILT 旋转后包围盒反推（单位空间 x±108、y∈[-189,189]），瓶底不越屏幕底。
+  const c = Math.abs(Math.cos(TILT)), s = Math.abs(Math.sin(TILT));
+  const hw = 108 * c + 189 * s, hh = 108 * s + 189 * c;
+  const k = Math.min(
+    windowWidth * 0.94 / (2 * hw),
+    (windowHeight * 0.99 - (riverY() + 6)) / (170 * c + hh),
+    780 / 400
+  );
   return {
-    k, cx: windowWidth / 2, cy: windowHeight * 0.52,
+    k, cx: windowWidth / 2, cy: riverY() + 6 + 170 * c * k,
     get H() { return this.k * 400; }, bodyHalf: 108 * k
   };
 }
@@ -231,10 +240,57 @@ function settleLantern(x, y, silent) {
   if (!silent) soundSettle();
 }
 
+// ================= 流场水丝（参考 "Waves based on breath"：噪声流场拖尾 + 呼吸衰减） =================
+// 技法：粒子沿 noise 流场游移，在半分辨率离屏画布上留下单像素轨迹；每帧用低 alpha
+// 夜色矩形衰减旧轨迹——衰减快=浪碎，衰减慢=丝长。衰减深度随呼吸摆动，浪因此有生灭。
+// 配色换夜河：冷丝=月光（150,190,235），暖丝=灯影（255,205,130），底=夜蓝 (9,15,33)。
+const WATER_TOP = () => riverY() - 30;
+
+function initWater() {
+  waterG = createGraphics(Math.ceil(windowWidth / 2), Math.ceil((windowHeight - WATER_TOP()) / 2));
+  waterG.pixelDensity(1);
+  waterPts = [];
+  const n = Math.min(1500, Math.floor(windowWidth * 1.1));
+  for (let i = 0; i < n; i++) {
+    waterPts.push({
+      x: rnd(0, waterG.width), y: rnd(0, waterG.height),
+      warm: rng() < 0.2, sp: rnd(0.5, 1.3)
+    });
+  }
+  waterZt = rnd(0, 100);
+  // 预滚：首帧就要有丝绸纹（headless 截图同理）
+  for (let i = 0; i < 110; i++) stepWater(1 / 30);
+}
+
+function stepWater(dt) {
+  if (!waterG) return;
+  waterZt += dt * 0.12;
+  const breathe = 0.5 + 0.5 * Math.sin(t * 0.35);
+  waterG.noStroke();
+  waterG.fill(9, 15, 33, 12 + 10 * breathe);              // 衰减深度 = 浪的呼吸
+  waterG.rect(0, 0, waterG.width, waterG.height);
+  const sc = dt * 60;
+  waterG.strokeWeight(1);
+  waterG.stroke(150, 190, 235, 52);
+  for (const p of waterPts) { if (!p.warm) { advectWater(p, sc); waterG.point(p.x, p.y); } }
+  waterG.stroke(255, 205, 130, 42);
+  for (const p of waterPts) { if (p.warm) { advectWater(p, sc); waterG.point(p.x, p.y); } }
+}
+
+function advectWater(p, sc) {
+  const th = noise(p.x * 0.014, p.y * 0.012, waterZt) * TWO_PI * 2;
+  p.x += (Math.cos(th) * 0.9 + 0.5) * p.sp * sc;          // 下游偏流（河有流向）
+  p.y += Math.sin(th) * 0.45 * p.sp * sc;
+  if (p.x < 0) p.x += waterG.width; else if (p.x > waterG.width) p.x -= waterG.width;
+  if (p.y < 0) p.y += waterG.height; else if (p.y > waterG.height) p.y -= waterG.height;
+}
+
 // ================= 更新 =================
 function update(dt, rawDt) {
   // 瓶塞缓动
   corkAnim += ((corkOpen ? 1 : 0) - corkAnim) * Math.min(1, rawDt * 3.5);
+
+  stepWater(dt);
 
   // 放行节奏：开塞且无活跃逃逸船时，依次标记（每 1.2-2s/FAST 一只）
   const activeEsc = boats.some(b => b.state === 'esc' || b.state === 'hold');
@@ -286,14 +342,14 @@ function update(dt, rawDt) {
       b.y += (-158 * geom.k - b.y) * Math.min(1, dt * 4);
       b.tilt = Math.sin(t * 9) * 0.14;
       if (b.holdT >= b.holdDur) {
-        // 越线 → 屏幕坐标，初速沿瓶口朝向 R(TILT)·(0,-1)
+        // 越线 → 屏幕坐标。瓶口已贴水：轻微起跃 + 主水平滑出，落点收紧在水线附近
         const s = localToScreen(b.x, b.y - 10 * geom.k);
         const sp = rnd(40, 90);
         outBoats.push({
           x: s.x, y: s.y,
           vx: Math.sin(TILT) * sp + rnd(-14, 14),
-          vy: -Math.cos(TILT) * sp,
-          yTarget: riverY() + rnd(-30, 30),
+          vy: -Math.cos(TILT) * sp * 0.25,
+          yTarget: riverY() + rnd(-22, 22),
           rot: b.tilt, ph: b.ph, age: 0, fade: 1
         });
         boats.splice(boats.indexOf(b), 1);
@@ -310,14 +366,14 @@ function update(dt, rawDt) {
     const o = outBoats[i];
     o.age += rawDt;
     o.vy += (o.yTarget - o.y) * 1.5 * rawDt;
-    o.vx += Math.sign(o.x - geom.cx) * 4 * rawDt;   // 向两侧漂开，不遮瓶子
+    if (o.x > 30 && o.x < windowWidth - 30) o.vx += Math.sign(o.x - geom.cx) * 4 * rawDt;   // 向两侧漂开，到舷缘止推
     o.vx *= (1 - 0.35 * rawDt); o.vy *= (1 - 0.6 * rawDt);
     o.x += o.vx * rawDt; o.y += o.vy * rawDt;
     o.rot *= (1 - 1.5 * rawDt);
     if (o.age > 2.2 && Math.abs(o.yTarget - o.y) < 16 && Math.hypot(o.vx, o.vy) < 10) {
       o.fade -= rawDt * 1.5;   // 船体淡出略快，河灯接力亮起（避免灰船残影）
       if (o.fade <= 0) {
-        settleLantern(o.x, o.y, false);
+        settleLantern(Math.max(18, Math.min(windowWidth - 18, o.x)), o.y, false);
         outBoats.splice(i, 1);
       }
     }
@@ -364,14 +420,14 @@ function update(dt, rawDt) {
 // ================= 渲染 =================
 function render() {
   const ctx = drawingContext;
-  const k = geom.k, cx = geom.cx, cy = geom.cy;
+  const k = geom.k, cx = geom.cx;
   const breath = (Math.sin(t * 0.628) + 1) / 2;
 
   drawBackground(ctx, breath);
 
   ctx.save();
-  ctx.translate(cx, cy);
-  ctx.rotate(TILT + Math.sin(t * 0.5) * 0.02);   // 倾斜 + 极缓摇摆（物理不感知）
+  ctx.translate(cx, geom.cy + Math.sin(t * 0.55) * 3.5);   // 浮沉（仅渲染层，物理不感知）
+  ctx.rotate(TILT + Math.sin(t * 0.5) * 0.02);             // 倾斜 + 极缓摇摆
 
   drawGlassBody(ctx, k);                          // Pass 1 玻璃体块
   drawInterior(ctx, k);                           // Pass 2 clip 瓶内世界
@@ -380,12 +436,14 @@ function render() {
 
   ctx.restore();
 
+  drawFrontWater(ctx);                            // 前层水：水下瓶身透水 + 压暗 + 水线
+  drawLanterns(ctx);                              // 河灯浮在面层水上（不被压暗）
   drawOutBoats(ctx, k);                           // 屏幕空间逃逸纸船
   drawMouthBeam(ctx, k, breath);                  // 开塞瓶口光束（屏幕空间）
   drawVignette(ctx);
 }
 
-// ---- 背景：夜河 / 波光视差 / 远岸 / 河灯 / 涟漪 ----
+// ---- 背景：夜空 / 流场水丝带 / 远岸剪影 ----
 function drawBackground(ctx, breath) {
   const w = windowWidth, h = windowHeight;
   const g = ctx.createLinearGradient(0, 0, 0, h);
@@ -400,6 +458,15 @@ function drawBackground(ctx, breath) {
   aura.addColorStop(1, 'rgba(90,110,220,0)');
   ctx.fillStyle = aura; ctx.fillRect(0, 0, w, h);
   ctx.restore();
+
+  // 流场水丝带（本帧累积结果，顶缘长羽化防马赫带 + 远岸遮住）
+  if (waterG) {
+    ctx.drawImage(waterG.canvas, 0, WATER_TOP(), w, h - WATER_TOP());
+    const ft = ctx.createLinearGradient(0, WATER_TOP() - 6, 0, WATER_TOP() + 40);
+    ft.addColorStop(0, 'rgba(10,16,32,1)');
+    ft.addColorStop(1, 'rgba(10,16,32,0)');
+    ctx.fillStyle = ft; ctx.fillRect(0, WATER_TOP() - 6, w, 46);
+  }
 
   // 远岸剪影 + 别处的灯（告诉用户：船要去的地方存在）
   ctx.fillStyle = 'rgba(8,13,28,0.92)';
@@ -416,21 +483,36 @@ function drawBackground(ctx, breath) {
     ctx.beginPath(); ctx.arc(w * fx, h * fy, 2.2, 0, 7); ctx.fill();
   }
 
-  // 波光视差带（3 层，不同速度/透明度）
-  for (let i = 0; i < 3; i++) {
-    const y0 = riverY() + i * h * 0.045;
-    const amp = 5 + i * 3, spd = 14 + i * 9;
-    ctx.strokeStyle = `rgba(130,170,235,${0.11 - i * 0.025})`;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    for (let x = 0; x <= w; x += 8) {
-      const y = y0 + Math.sin((x + t * spd) * 0.02 + i * 2.4) * amp;
-      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-  }
+  // 波光已由流场水丝接管（见 stepWater）
+}
 
-  // 河灯层（放行的结果，会话内长明）
+// ---- 前层水：瓶子半浮的关键——水线以下叠 silk 波光（水下 shimmer），再向下压暗表深度 ----
+function drawFrontWater(ctx) {
+  const w = windowWidth, h = windowHeight, ry = riverY();
+  if (waterG) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = 0.30;
+    ctx.drawImage(waterG.canvas, 4, ry + 2, w, h - ry - 2);   // 只覆盖水线以下，错位防自对齐
+    ctx.restore();
+  }
+  const dg = ctx.createLinearGradient(0, ry, 0, h);
+  dg.addColorStop(0, 'rgba(7,12,28,0.08)');
+  dg.addColorStop(1, 'rgba(7,12,28,0.34)');
+  ctx.fillStyle = dg; ctx.fillRect(0, ry, w, h - ry);
+  // 水线：一道横贯屏幕的亮沿，定住"瓶口接着水面"的读法
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  const wl = ctx.createLinearGradient(0, ry - 4, 0, ry + 4);
+  wl.addColorStop(0, 'rgba(150,190,235,0)');
+  wl.addColorStop(0.5, 'rgba(150,190,235,0.06)');
+  wl.addColorStop(1, 'rgba(150,190,235,0)');
+  ctx.fillStyle = wl; ctx.fillRect(0, ry - 4, w, 8);
+  ctx.restore();
+}
+
+// ---- 河灯层（放行的结果，会话内长明）+ 涟漪（点击河灯的回应）。浮在面层水上，画在前层水之后 ----
+function drawLanterns(ctx) {
   for (const l of lanterns) {
     const pulse = (0.55 + 0.45 * Math.sin(t * l.tw + l.ph)) * 0.8 + l.click * 0.9;
     ctx.save();
@@ -446,7 +528,6 @@ function drawBackground(ctx, breath) {
     ctx.beginPath(); ctx.ellipse(l.x, l.y + 9, 14, 4, 0, 0, 7); ctx.fill();
   }
 
-  // 涟漪（点击河灯的回应）
   for (const r of ripples) {
     ctx.strokeStyle = `rgba(255,220,160,${r.a})`;
     ctx.lineWidth = 1.4;
@@ -646,7 +727,10 @@ function drawGlassFinish(ctx, k, breath) {
   ctx.stroke();
 
   // 3c 高光带：screen + 填充 bezier 长条 + blur(12k)——硬边 = 布条，模糊 = 光
+  // clip 进瓶形：blur 会向外溢 12k+，不裁就会在肩颈部超出轮廓（"高光越过屏蔽"）
   ctx.save();
+  defineBottlePath(ctx, 0);
+  ctx.clip();
   ctx.globalCompositeOperation = 'screen';
   ctx.filter = `blur(${Math.round(12 * k)}px)`;
   // 左主光带（宽，峰 alpha 0.60，blur 后降档补偿过的值）
@@ -738,6 +822,8 @@ function drawOutBoats(ctx, k) {
     ctx.beginPath(); ctx.arc(0, -3 * s, 11 * s, 0, 7); ctx.fill();
     ctx.fillStyle = `rgba(255,224,160,${0.9 * flicker})`;
     ctx.beginPath(); ctx.arc(0, -3 * s, 2.2 * s, 0, 7); ctx.fill();
+    ctx.fillStyle = `rgba(255,196,112,${0.20 * flicker})`;   // 水面倒影：贴水感的关键
+    ctx.beginPath(); ctx.ellipse(0, 9 * s, 13 * s, 3.6 * s, 0, 0, 7); ctx.fill();
     ctx.restore();
   }
 }
@@ -861,11 +947,21 @@ function stirAt(l, strength) {
 function setup() {
   pixelDensity(Math.min(2, window.devicePixelRatio || 1));
   createCanvas(windowWidth, windowHeight);
+  noiseSeed(SEED);            // 流场水丝纳入 ?seed 确定性
   geom = buildGeom();
   initWorld();
+  initWater();
   bindInteraction();
   // ?warp=N：以固定步长快进模拟（headless 静态验证各动画态）
   for (let i = 0; i < Math.floor(WARP * 60); i++) { t += 1 / 60; update(1 / 60, 1 / 60); }
+  if (Q.has('dump')) {
+    document.title = JSON.stringify({
+      riverY: riverY(), cy: Math.round(geom.cy), k: +geom.k.toFixed(3),
+      out: outBoats.map(o => [Math.round(o.x), Math.round(o.y), Math.round(o.yTarget), +o.age.toFixed(1)]),
+      lanterns: lanterns.map(l => [Math.round(l.x), Math.round(l.y)]),
+      boats: boats.map(b => [b.state, Math.round(b.x), Math.round(b.y)])
+    });
+  }
 }
 
 function draw() {
@@ -881,6 +977,7 @@ function windowResized() {
   geom = buildGeom();
   const f = geom.k / oldK;
   for (const b of boats) { b.x *= f; b.y *= f; b.tx *= f; b.vx *= f; b.vy *= f; }
+  initWater();
 }
 </script>
 </body>
