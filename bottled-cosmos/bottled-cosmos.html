@@ -1,0 +1,1392 @@
+<!DOCTYPE html>
+<!--
+  Title: Bottled Cosmos · 瓶装宇宙
+  Tech: p5.js, Three.js, Canvas 2D
+  Keywords: p5.js, canvas 2d, three.js, webgl, touch interaction
+  Features: A bottled miniature universe: p5.js Canvas 2D glass rendering layered over an offscreen Three.js WebGL galaxy, with spectral-classed stars living 30-second lives. Tap the cork to release escaping stars, hold the bottle to stir star dust, long-press a star to name it and mint a star card.
+  Render: WebGL (Three.js)
+  Audio: no
+  Touch: yes
+  Particles: N/A
+  Standalone: yes, single HTML file, 2 CDN dependencies
+  Repo: https://github.com/shasha1108/healing-visual-lab
+--><html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>瓶装宇宙 · BOTTLED COSMOS</title>
+<script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; background: #020305; overflow: hidden; height: 100%; }
+  canvas { display: block; touch-action: none; }
+
+  .ui {
+    position: fixed; z-index: 10; pointer-events: none;
+    font-family: "Songti SC", "STSong", "Noto Serif SC", serif;
+    color: rgba(200, 220, 245, 0.55);
+    transition: opacity 1.6s ease;
+  }
+  .ui.faded { opacity: 0; }
+  #hint {
+    top: 20px; right: 20px; text-align: right;
+    font-size: 12px; letter-spacing: 2px; line-height: 2;
+  }
+  #footer {
+    bottom: 18px; left: 0; right: 0; text-align: center;
+    font-size: 11px; letter-spacing: 4px; color: rgba(180, 205, 235, 0.30);
+  }
+
+  /* ---- 命名弹窗 / 星卡弹窗 ---- */
+  .modal-mask {
+    position: fixed; inset: 0; z-index: 20; display: none;
+    align-items: center; justify-content: center;
+    background: rgba(2, 4, 10, 0.62);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+  .modal-mask.show { display: flex; }
+  .modal {
+    font-family: "Songti SC", "STSong", "Noto Serif SC", serif;
+    background: rgba(10, 16, 32, 0.88);
+    border: 1px solid rgba(140, 180, 230, 0.22);
+    border-radius: 14px;
+    padding: 30px 34px 26px;
+    width: min(320px, 82vw);
+    text-align: center;
+    box-shadow: 0 0 60px rgba(80, 130, 220, 0.12);
+  }
+  .modal .m-title {
+    color: rgba(215, 232, 255, 0.85); font-size: 15px; letter-spacing: 4px; margin-bottom: 6px;
+  }
+  .modal .m-sub {
+    color: rgba(160, 185, 220, 0.45); font-size: 11px; letter-spacing: 2px; margin-bottom: 20px;
+  }
+  .modal input {
+    width: 100%; box-sizing: border-box;
+    background: rgba(20, 30, 55, 0.7);
+    border: 1px solid rgba(140, 180, 230, 0.3);
+    border-radius: 8px; outline: none;
+    color: rgba(230, 240, 255, 0.95);
+    font-family: inherit; font-size: 15px; letter-spacing: 2px;
+    padding: 10px 12px; text-align: center; margin-bottom: 18px;
+  }
+  .modal input:focus { border-color: rgba(170, 210, 255, 0.6); }
+  .modal .btn-row { display: flex; gap: 10px; justify-content: center; }
+  .modal button {
+    font-family: inherit; font-size: 13px; letter-spacing: 3px;
+    padding: 9px 20px; border-radius: 999px; cursor: pointer;
+    border: 1px solid rgba(140, 180, 230, 0.35);
+    background: transparent; color: rgba(200, 222, 250, 0.8);
+    transition: background 0.3s, color 0.3s;
+  }
+  .modal button:hover { background: rgba(120, 170, 240, 0.15); color: #fff; }
+  .modal button.primary {
+    background: rgba(110, 165, 245, 0.22); color: rgba(235, 244, 255, 0.95);
+    border-color: rgba(150, 195, 255, 0.5);
+  }
+  #card-modal .modal { width: min(360px, 86vw); padding: 22px 22px 20px; }
+  #card-img {
+    width: 100%; border-radius: 10px; display: block; margin-bottom: 16px;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+  }
+</style>
+</head>
+<body>
+
+<div id="hint" class="ui">点按瓶塞，放星辰回宇宙<br>按住瓶身，搅动星尘<br>长按一颗恒星，为它命名</div>
+<div id="footer" class="ui">每颗恒星的一生，只有三十秒</div>
+
+<div id="name-modal" class="modal-mask">
+  <div class="modal">
+    <div class="m-title">为这颗星命名</div>
+    <div class="m-sub">它会带着这个名字，继续燃烧</div>
+    <input id="star-name-input" type="text" maxlength="12" placeholder="星的名字，或一个人的名字">
+    <div class="btn-row">
+      <button id="name-cancel">放回宇宙</button>
+      <button id="name-ok" class="primary">生成星卡</button>
+    </div>
+  </div>
+</div>
+
+<div id="card-modal" class="modal-mask">
+  <div class="modal">
+    <img id="card-img" alt="星卡">
+    <div class="btn-row">
+      <button id="card-close">放回宇宙</button>
+      <button id="card-save" class="primary">保存星卡</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   瓶装宇宙 · BOTTLED COSMOS
+   ------------------------------------------------------------
+   坐标约定（先写死，全文件遵守）：
+   - 物理与内容渲染都在「瓶内局部坐标系」：原点 = 瓶体路径原点
+     （drift-bottle 药剂瓶曲线的 (0,0)），+x 向右，+y 向下。
+   - 瓶形在「单位空间」定义（颈 ±30、身 ±108、底 188，源自
+     drift-bottle），渲染时乘以 geom.k 缩放；innerR(y) 返回
+     像素半径，是唯一边界权威。
+   - 渲染顺序：宇宙背景 → translate(cx,cy) → clip 瓶内内容 →
+     玻璃三 pass（底厚/菲涅尔/高光带）→ 绳结软木塞 → 暗角。
+   ============================================================ */
+
+// ---------- URL 测试钩子：?fast=1 加速生命周期 ?seed=N 固定随机 ?autopick=1 ?autocard=1 ----------
+const URLQ = new URLSearchParams(location.search);
+const FAST = URLQ.get('fast') ? 5 : 1;
+
+let _seed = URLQ.get('seed') ? parseInt(URLQ.get('seed')) : null;
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const _rng = _seed !== null ? mulberry32(_seed) : Math.random;
+function rnd(a, b) {
+  if (a === undefined) return _rng();
+  if (b === undefined) return _rng() * a;
+  return a + _rng() * (b - a);
+}
+function rndPick(arr) { return arr[Math.floor(_rng() * arr.length)]; }
+
+// ---------- 全局参数 ----------
+const LIFE = 30 / FAST;          // 一颗恒星的一生（秒）
+const DUST_TARGET = 260;
+const STAR_MIN = 4, STAR_MAX = 8;
+const CELL = 34;
+const IGNITE_COOLDOWN = 5 / FAST;
+
+let geom = null;
+let dusts = [], stars = [], protos = [], waves = [], flashes = [];
+let timeScale = 1, targetTimeScale = 1;
+let igniteTimer = 0;
+let densityMap = new Map();
+let frame = 0;
+
+// 宇宙背景
+let bgStars = [];
+let shooters = [];
+let shootTimer = 3;
+
+const pointer = { down: false, x: 0, y: 0, lx: 0, ly: 0 };
+let pressStar = null, pressT = 0, pressX = 0, pressY = 0;
+let pick = null;
+let idleTimer = null;
+
+// 瓶塞开合 + 逃逸星辰（逃逸后为屏幕坐标系）
+let corkOpen = false, corkAnim = 0;
+let escapees = [];
+let starEscapeTimer = 6;
+
+// ---------- 光谱分类 ----------
+const CLASSES = {
+  blue:   { name: 'B 型 · 蓝白星', core: [255, 255, 255], glow: [140, 185, 255], r: 7.5, mag: '-2.4' },
+  yellow: { name: 'G 型 · 黄矮星', core: [255, 250, 235], glow: [255, 224, 150], r: 6.0, mag: '+4.8' },
+  red:    { name: 'M 型 · 红矮星', core: [255, 235, 225], glow: [255, 150, 110], r: 4.2, mag: '+9.6' },
+};
+
+// ---------- 发光精灵 ----------
+function makeGlowSprite(size, r, g, b, coreWhite) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const x = c.getContext('2d');
+  const grad = x.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  grad.addColorStop(0, coreWhite ? 'rgba(255,255,255,0.95)' : `rgba(${r},${g},${b},0.85)`);
+  grad.addColorStop(0.25, `rgba(${r},${g},${b},0.45)`);
+  grad.addColorStop(0.6, `rgba(${r},${g},${b},0.12)`);
+  grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+  x.fillStyle = grad;
+  x.fillRect(0, 0, size, size);
+  return c;
+}
+// 星云雾气：无白芯的极软色团（falling-verse 星云雾的 2D 移植）
+function makeMistSprite(size, r, g, b) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const x = c.getContext('2d');
+  const grad = x.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  grad.addColorStop(0, `rgba(${r},${g},${b},0.55)`);
+  grad.addColorStop(0.4, `rgba(${r},${g},${b},0.22)`);
+  grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+  x.fillStyle = grad;
+  x.fillRect(0, 0, size, size);
+  return c;
+}
+let SPRITES = {};
+
+// 瓶内星云雾（位置为瓶内局部 px，setup 时按 geom 布置）
+let mists = [];
+// 银河带：星尘与恒星沿带分布（buildMists 时初始化）
+let band = null;
+// 瓶子倾斜角（弧度，负 = 上方向左倾）
+const TILT = -0.5;
+
+// ---------- 瓶形几何（drift-bottle 药剂瓶曲线，单位空间 × k） ----------
+function buildGeom() {
+  const k = Math.min(windowHeight * 0.82, 780) / 400;
+  return {
+    k,
+    cx: windowWidth / 2,
+    cy: windowHeight * 0.52,
+    get H() { return this.k * 400; },
+    bodyHalf: 108 * k,
+  };
+}
+
+// 内壁半径（像素）：唯一边界权威
+function innerR(y) {
+  const k = geom.k, u = y / k;
+  let R;
+  if (u < -105) R = 30;
+  else if (u < 10) { const t = (u + 105) / 115, s = t * t * (3 - 2 * t); R = 30 + 78 * s; }
+  else if (u <= 135) R = 108;
+  else { const t = Math.min(1, (u - 135) / 53); R = 108 * Math.sqrt(Math.max(0, 1 - t * t)); }
+  return Math.max(0, (R - 7) * k);
+}
+
+// 药剂瓶路径（局部像素坐标）
+function defineBottlePath(ctx, inset) {
+  const k = geom.k, i = (inset || 0) * k;
+  ctx.beginPath();
+  ctx.moveTo(-30 * k + i, -156 * k);
+  ctx.lineTo(-30 * k + i, -105 * k);
+  ctx.bezierCurveTo(-30 * k + i, -60 * k, -108 * k - i, -35 * k, -108 * k - i, 30 * k);
+  ctx.lineTo(-108 * k - i, 135 * k);
+  ctx.quadraticCurveTo(-108 * k - i, 178 * k - i * 0.5, -58 * k, 178 * k - i);
+  ctx.quadraticCurveTo(0, 188 * k - i, 58 * k, 178 * k - i);
+  ctx.quadraticCurveTo(108 * k + i, 178 * k - i * 0.5, 108 * k + i, 135 * k);
+  ctx.lineTo(108 * k + i, 30 * k);
+  ctx.bezierCurveTo(108 * k + i, -35 * k, 30 * k - i, -60 * k, 30 * k - i, -105 * k);
+  ctx.lineTo(30 * k - i, -156 * k);
+  ctx.closePath();
+}
+
+// ============================================================
+//  3D 星系层（直接搬运 falling-verse §10：星云盘 + 霓虹星 +
+//  星云雾 + 冷暖尘埃 + 10s 呼吸 + ACES 曝光）
+//  离屏 WebGL 渲染，每帧 drawImage 进瓶内剪辑区；云团压成
+//  星盘、斜视投影，盘本身即银河带。THREE 缺失/失败时回退 2D。
+// ============================================================
+const gal = (function () {
+  if (!window.THREE) return null;
+  try {
+    const RW = 420, RH = 570; // 离屏分辨率 ≈ 瓶内区 224k×296k（k≈1.85）
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    renderer.setSize(RW, RH);
+    renderer.setClearColor(0x000000, 1); // 不透明黑底：'lighter' 合成时黑色零贡献，只加光，不发灰
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(42, RW / RH, 0.1, 500);
+    camera.position.set(0, 0, 88);
+
+    function glowTex(inner, outer, size) { // falling-verse createGlowTex 原样
+      const c = document.createElement('canvas'); c.width = size; c.height = size;
+      const g = c.getContext('2d');
+      const gr = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+      gr.addColorStop(0, inner); gr.addColorStop(0.2, inner);
+      gr.addColorStop(0.5, outer); gr.addColorStop(1, 'transparent');
+      g.fillStyle = gr; g.fillRect(0, 0, size, size);
+      return new THREE.CanvasTexture(c);
+    }
+    const TEX_WHITE = glowTex('rgba(255,255,255,1)', 'rgba(255,255,255,0.3)', 64);
+    const TEX_BRIGHT = glowTex('rgba(255,255,255,1)', 'rgba(255,255,255,0.5)', 64);
+    const TEX_GOLD = glowTex('rgba(255,255,255,1)', 'rgba(255,180,50,0.5)', 128);
+
+    // 嵌套组：slopeGroup（屏幕斜率=银河带方向）→ tiltGroup（盘面倾角→带厚度）→ spinGroup（绕盘法线自转）
+    const slopeGroup = new THREE.Group();
+    const tiltGroup = new THREE.Group();
+    const spinGroup = new THREE.Group();
+    tiltGroup.rotation.x = 0.5; // 盘面在 xz 平面、相机沿 -z 看：小倾角=扁带（大倾角反而变圆脸）
+    tiltGroup.rotation.y = 0.18;
+    slopeGroup.rotation.z = -0.42; // 与 band.a 同斜率（three 为 y-up，取负）
+    slopeGroup.add(tiltGroup); tiltGroup.add(spinGroup); scene.add(slopeGroup);
+
+    function discPos(arr, i, R, thick) { // 盘内均布（sqrt 半径）+ 法向高斯厚度
+      const r = R * Math.sqrt(Math.random()), th = Math.random() * Math.PI * 2;
+      arr[i * 3] = Math.cos(th) * r;
+      arr[i * 3 + 1] = (Math.random() + Math.random() + Math.random() - 1.5) / 1.5 * thick;
+      arr[i * 3 + 2] = Math.sin(th) * r;
+    }
+
+    // §10a 星云盘（1500，加法混合）
+    const STAR_N = 650;
+    const starPos = new Float32Array(STAR_N * 3);
+    for (let i = 0; i < STAR_N; i++) discPos(starPos, i, 34, 6);
+    const starGeo = new THREE.BufferGeometry();
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+    const starCloud = new THREE.Points(starGeo, new THREE.PointsMaterial({
+      size: 0.9, map: TEX_WHITE, transparent: true, opacity: 0.5,
+      blending: THREE.AdditiveBlending, depthWrite: false
+    }));
+    spinGroup.add(starCloud);
+
+    // §10b 霓虹星（40，色相随时间循环 + 独立闪烁）
+    const NEON_N = 40;
+    const neonPos = new Float32Array(NEON_N * 3);
+    const neonCol = new Float32Array(NEON_N * 3);
+    const neonData = [];
+    for (let i = 0; i < NEON_N; i++) {
+      discPos(neonPos, i, 31, 4);
+      const hue = Math.random();
+      const c = new THREE.Color().setHSL(hue, 0.9, 0.6);
+      neonCol[i * 3] = c.r; neonCol[i * 3 + 1] = c.g; neonCol[i * 3 + 2] = c.b;
+      neonData.push({ baseA: 0.3 + Math.random() * 0.7, freq: 1 + Math.random() * 4, phase: Math.random() * Math.PI * 2, hue, baseY: neonPos[i * 3 + 1] });
+    }
+    const neonGeo = new THREE.BufferGeometry();
+    neonGeo.setAttribute('position', new THREE.BufferAttribute(neonPos, 3));
+    neonGeo.setAttribute('color', new THREE.BufferAttribute(neonCol, 3));
+    const neonPts = new THREE.Points(neonGeo, new THREE.PointsMaterial({
+      size: 0.6, vertexColors: true, map: TEX_BRIGHT,
+      blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.85
+    }));
+    spinGroup.add(neonPts);
+
+    // §10c 星云雾（200，HSL 0.58–0.8 青蓝紫壳层）
+    const NEB_N = 120;
+    const nebPos = new Float32Array(NEB_N * 3);
+    const nebCol = new Float32Array(NEB_N * 3);
+    for (let i = 0; i < NEB_N; i++) {
+      discPos(nebPos, i, 40, 10);
+      const c = new THREE.Color().setHSL(0.58 + Math.random() * 0.22, 0.6, 0.3 + Math.random() * 0.4);
+      nebCol[i * 3] = c.r; nebCol[i * 3 + 1] = c.g; nebCol[i * 3 + 2] = c.b;
+    }
+    const nebGeo = new THREE.BufferGeometry();
+    nebGeo.setAttribute('position', new THREE.BufferAttribute(nebPos, 3));
+    nebGeo.setAttribute('color', new THREE.BufferAttribute(nebCol, 3));
+    const nebula = new THREE.Points(nebGeo, new THREE.PointsMaterial({
+      size: 2.6, vertexColors: true, map: TEX_WHITE,
+      blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.3
+    }));
+    spinGroup.add(nebula);
+
+    // §10d 冷暖尘埃（300，漂移 + 盘界回绕）
+    const DUST_N = 200;
+    const dustPos = new Float32Array(DUST_N * 3);
+    const dustCol = new Float32Array(DUST_N * 3);
+    const dustData = [];
+    for (let i = 0; i < DUST_N; i++) {
+      discPos(dustPos, i, 34, 6);
+      const warm = Math.random() > 0.5;
+      const c = warm ? new THREE.Color().setHSL(0.12, 0.7, 0.4 + Math.random() * 0.4)
+                     : new THREE.Color().setHSL(0.6, 0.4, 0.5 + Math.random() * 0.3);
+      dustCol[i * 3] = c.r; dustCol[i * 3 + 1] = c.g; dustCol[i * 3 + 2] = c.b;
+      dustData.push({ dx: (Math.random() - 0.5) * 0.015, dy: (Math.random() - 0.5) * 0.008, dz: (Math.random() - 0.5) * 0.015 });
+    }
+    const dustGeo = new THREE.BufferGeometry();
+    dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
+    dustGeo.setAttribute('color', new THREE.BufferAttribute(dustCol, 3));
+    const dustPts = new THREE.Points(dustGeo, new THREE.PointsMaterial({
+      size: 0.2, vertexColors: true, map: TEX_GOLD,
+      blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.45
+    }));
+    spinGroup.add(dustPts);
+
+    let spinBoost = 0;
+    function update(dt, t, breath, stirring) {
+      spinBoost += ((stirring ? 1.2 : 0) - spinBoost) * Math.min(1, dt * 1.6); // 按住搅动→星系加速旋
+      spinGroup.rotation.y += dt * (0.05 + spinBoost);
+
+      starCloud.material.opacity = 0.45 + breath * 0.5;    // §11 视觉呼吸（抬底防信息流淹没）
+      nebula.material.opacity = 0.32 + breath * 0.3;
+      dustPts.material.opacity = 0.42 + breath * 0.35;
+      renderer.toneMappingExposure = 2.0 + breath * 0.5;
+
+      for (let i = 0; i < NEON_N; i++) {                   // 霓虹色相循环 + 闪烁（§G 原样）
+        const nd = neonData[i];
+        const hue = (nd.hue + t * 0.03) % 1;
+        const a = nd.baseA + Math.sin(t * nd.freq + nd.phase) * 0.4;
+        const c = new THREE.Color().setHSL(hue, 0.9, 0.5 + a * 0.3);
+        neonCol[i * 3] = c.r; neonCol[i * 3 + 1] = c.g; neonCol[i * 3 + 2] = c.b;
+        neonPos[i * 3 + 1] = nd.baseY + Math.sin(t * 2 + nd.phase) * 0.5;
+      }
+      neonGeo.attributes.position.needsUpdate = true;
+      neonGeo.attributes.color.needsUpdate = true;
+
+      for (let i = 0; i < DUST_N; i++) {                   // 尘埃漂移 + 盘界回绕（§G 原样）
+        dustPos[i * 3] += dustData[i].dx;
+        dustPos[i * 3 + 1] += dustData[i].dy;
+        dustPos[i * 3 + 2] += dustData[i].dz;
+        const x = dustPos[i * 3], z = dustPos[i * 3 + 2];
+        if (x * x + z * z > 34 * 34) { dustPos[i * 3] *= -0.95; dustPos[i * 3 + 2] *= -0.95; }
+        if (Math.abs(dustPos[i * 3 + 1]) > 7) dustPos[i * 3 + 1] *= -1;
+      }
+      dustGeo.attributes.position.needsUpdate = true;
+
+      renderer.render(scene, camera);
+    }
+    return { canvas: renderer.domElement, update };
+  } catch (e) {
+    console.warn('3D 星系层初始化失败，回退 2D 雾气:', e);
+    return null;
+  }
+})();
+
+// ============================================================
+//  setup
+// ============================================================
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  pixelDensity(Math.min(2, window.devicePixelRatio || 1));
+  SPRITES = {
+    dustCool: makeGlowSprite(24, 190, 225, 255, false),
+    dustWarm: makeGlowSprite(24, 255, 224, 170, false),
+    dustPink: makeGlowSprite(24, 255, 140, 190, false),
+    dustCyan: makeGlowSprite(24, 120, 240, 255, false),
+    blue: makeGlowSprite(160, 140, 185, 255, true),
+    yellow: makeGlowSprite(160, 255, 224, 150, true),
+    red: makeGlowSprite(160, 255, 150, 110, true),
+    flash: makeGlowSprite(256, 235, 244, 255, true),
+    mistViolet: makeMistSprite(256, 122, 92, 255),
+    mistBlue: makeMistSprite(256, 58, 108, 255),
+    mistPink: makeMistSprite(256, 255, 92, 160),
+    mistTeal: makeMistSprite(256, 58, 208, 255),
+  };
+  geom = buildGeom();
+  buildBackground();
+  buildMists();
+  seedUniverse();
+  bindUI();
+  armIdleFade();
+  if (URLQ.get('opencork')) {
+    // 直接开塞 + 预撒逃逸流（headless 静态验证用，绕开 rAF 动画依赖）
+    corkOpen = true; corkAnim = 1;
+    for (let i = 0; i < 18; i++) {
+      const d = makeDust(rnd(-20, 20) * geom.k, -160 * geom.k);
+      const e = localToScreenEscape(d, SPRITES.dustCool, rnd(2, 9), dustSpriteCol(d));
+      e.life = rnd(0, 2.5);
+      e.x += rnd(-40, 160); e.y += rnd(-220, 40);
+      escapees.push(e);
+    }
+    const st = stars[0];
+    if (st) {
+      const se = localToScreenEscape(st, SPRITES[st.cls], rnd(6, 10), CLASSES[st.cls].glow);
+      se.life = 1.2; se.x += 60; se.y -= 120;
+      escapees.push(se);
+    }
+  }
+  if (URLQ.get('autopick')) setTimeout(() => { if (stars[0]) { startPick(stars[0]); showNameModal(); } }, 2000);
+  if (URLQ.get('autocard')) setTimeout(() => { if (stars[0]) { startPick(stars[0]); openCard(stars[0], '织云'); } }, 2500);
+}
+
+function windowResized() {
+  const oldK = geom.k;
+  resizeCanvas(windowWidth, windowHeight);
+  geom = buildGeom();
+  const k = geom.k / oldK;
+  [...dusts, ...stars, ...protos].forEach(p => { p.x *= k; p.y *= k; });
+  buildBackground();
+  buildMists();
+}
+
+// ---------- 宇宙背景（falling-verse：星野 + 彩色霓虹星 + 流星 + 呼吸） ----------
+function buildBackground() {
+  bgStars = [];
+  const n = Math.floor((windowWidth * windowHeight) / 4200);
+  for (let i = 0; i < n; i++) {
+    const roll = _rng();
+    bgStars.push({
+      x: rnd(0, windowWidth), y: rnd(0, windowHeight),
+      r: rnd(0.6, roll > 0.92 ? 2.2 : 1.4),
+      ph: rnd(0, Math.PI * 2), tw: rnd(0.4, 1.8),
+      col: roll > 0.92 ? rndPick([[255, 210, 140], [255, 140, 190], [140, 220, 255]]) : [205, 222, 250],
+    });
+  }
+  shooters = [];
+}
+
+function buildMists() {
+  const bh = geom.bodyHalf;
+  mists = [
+    { sp: 'mistViolet', x: -bh * 0.45, y: -20 * geom.k,  s: bh * 3.2, drift: 0.05, ph: rnd(0, 6) },
+    { sp: 'mistBlue',   x:  bh * 0.40, y:  60 * geom.k,  s: bh * 3.6, drift: -0.04, ph: rnd(0, 6) },
+    { sp: 'mistPink',   x:  bh * 0.10, y: 120 * geom.k,  s: bh * 2.6, drift: 0.03, ph: rnd(0, 6) },
+    { sp: 'mistTeal',   x: -bh * 0.30, y:  90 * geom.k,  s: bh * 2.4, drift: -0.05, ph: rnd(0, 6) },
+  ];
+  // 银河带：从左上到右下穿过瓶腹，星尘/恒星沿带富集
+  band = { a: 0.42, ox: 0, oy: 30 * geom.k, len: 95 * geom.k, spread: 26 * geom.k };
+  band.dir = { x: Math.cos(band.a), y: Math.sin(band.a) };
+  band.n = { x: -Math.sin(band.a), y: Math.cos(band.a) };
+}
+
+function seedUniverse() {
+  dusts = []; stars = []; protos = []; waves = []; flashes = [];
+  for (let i = 0; i < DUST_TARGET; i++) dusts.push(makeDust());
+  const n = 6;
+  for (let i = 0; i < n; i++) {
+    const s = makeStar(rndPick(['blue', 'yellow', 'yellow', 'red', 'red', 'red']));
+    s.age = rnd(0, LIFE * 0.8);
+    stars.push(s);
+  }
+  for (let i = 0; i < 2; i++) {
+    const p = makeProto();
+    p.mass = rnd(8, 20);
+    protos.push(p);
+  }
+}
+
+// ============================================================
+//  实体构造
+// ============================================================
+function randomInnerPos(margin) {
+  for (let i = 0; i < 40; i++) {
+    let x, y;
+    if (band && _rng() < 0.62) {
+      // 银河带富集：沿带走 t，法向高斯散布
+      const t = rnd(-1, 1);
+      const off = ((rnd() + rnd() + rnd()) - 1.5) / 1.5 * band.spread;
+      x = band.ox + band.dir.x * t * band.len + band.n.x * off;
+      y = band.oy + band.dir.y * t * band.len + band.n.y * off;
+    } else {
+      y = rnd(-80, 150) * geom.k;
+      const R0 = innerR(y) - (margin || 10);
+      if (R0 <= 8) continue;
+      x = rnd(-R0, R0) * 0.85;
+    }
+    const R = innerR(y) - (margin || 10);
+    if (R > 8 && Math.abs(x) <= R) return { x, y };
+  }
+  return { x: 0, y: 60 * geom.k };
+}
+
+function makeDust(x, y) {
+  const p = (x !== undefined) ? { x, y } : randomInnerPos(12);
+  const roll = _rng();
+  return {
+    x: p.x, y: p.y,
+    vx: rnd(-3, 3), vy: rnd(-3, 3),
+    sz: rnd(0.7, 1.6),
+    warm: roll > 0.7,
+    neon: roll < 0.12 ? rndPick(['dustPink', 'dustCyan']) : null,
+    tw: rnd(0.5, 2.2), ph: rnd(0, Math.PI * 2),
+    seed: rnd(0, 1000),
+  };
+}
+
+function makeProto() {
+  const p = randomInnerPos(26);
+  return { x: p.x, y: p.y, mass: 0, born: 0, pulse: rnd(0, Math.PI * 2) };
+}
+
+function makeStar(cls, x, y) {
+  const p = (x !== undefined) ? { x, y } : randomInnerPos(30);
+  return {
+    cls, x: p.x, y: p.y,
+    vx: rnd(-2, 2), vy: rnd(-2, 2),
+    age: 0, exploded: false,
+    r: CLASSES[cls].r * rnd(0.9, 1.15),
+    ph: rnd(0, Math.PI * 2), tw: rnd(1.5, 3),
+    drawX: p.x, drawY: p.y, drawScale: 1,
+    seed: rnd(0, 1000),
+  };
+}
+
+// ============================================================
+//  更新
+// ============================================================
+function rebuildDensity() {
+  densityMap.clear();
+  for (const d of dusts) {
+    const k = `${Math.floor(d.x / CELL)},${Math.floor(d.y / CELL)}`;
+    densityMap.set(k, (densityMap.get(k) || 0) + 1);
+  }
+}
+
+function trySpawnProto(dt) {
+  igniteTimer -= dt;
+  if (igniteTimer > 0 || protos.length >= 3) return;
+  if (stars.length + protos.length >= STAR_MAX) return;
+  let best = null, bestN = 13;
+  for (const [k, n] of densityMap) {
+    if (n <= bestN) continue;
+    const [i, j] = k.split(',').map(Number);
+    const cx = (i + 0.5) * CELL, cy = (j + 0.5) * CELL;
+    if (protos.some(p => dist(p.x, p.y, cx, cy) < CELL * 2.5)) continue;
+    if (stars.some(s => dist(s.x, s.y, cx, cy) < CELL * 2)) continue;
+    if (innerR(cy) < Math.abs(cx) + 20) continue;
+    best = { x: cx, y: cy }; bestN = n;
+  }
+  if (best) { protos.push({ ...best, mass: 0, born: 0, pulse: rnd(0, 6) }); igniteTimer = IGNITE_COOLDOWN; }
+  if (stars.length < STAR_MIN) igniteTimer = Math.min(igniteTimer, 1.5 / FAST);
+}
+
+function classFromMass(m) { return m >= 40 ? 'blue' : m >= 26 ? 'yellow' : 'red'; }
+
+function ignite(p) {
+  const cls = classFromMass(p.mass);
+  stars.push(makeStar(cls, p.x, p.y));
+  flashes.push({ x: p.x, y: p.y, t: 0, dur: 0.7, maxR: geom.bodyHalf * 0.6, a0: 0.7, cls });
+}
+
+function explode(s) {
+  s.exploded = true;
+  waves.push({ x: s.x, y: s.y, t: 0, dur: 1.2, maxR: geom.bodyHalf * 1.5, cls: s.cls });
+  flashes.push({ x: s.x, y: s.y, t: 0, dur: 1.0, maxR: geom.bodyHalf * 1.8, a0: 0.95, cls: s.cls });
+  for (const d of dusts) {
+    const dx = d.x - s.x, dy = d.y - s.y;
+    const dd = Math.hypot(dx, dy);
+    if (dd < geom.bodyHalf * 1.8 && dd > 0.01) {
+      const f = (1 - dd / (geom.bodyHalf * 1.8)) * 130;
+      d.vx += (dx / dd) * f; d.vy += (dy / dd) * f;
+    }
+  }
+  const n = Math.floor(rnd(34, 52));
+  for (let i = 0; i < n; i++) {
+    const a = rnd(0, Math.PI * 2), rr = rnd(2, 14);
+    const nd = makeDust(s.x + Math.cos(a) * rr, s.y + Math.sin(a) * rr);
+    nd.vx = Math.cos(a) * rnd(6, 26); nd.vy = Math.sin(a) * rnd(6, 26);
+    dusts.push(nd);
+  }
+}
+
+function update(dt, rawDt) {
+  frame++;
+  if (frame % 10 === 1) rebuildDensity();
+  trySpawnProto(dt);
+
+  // ---- 原恒星：吸积 ----
+  for (let i = protos.length - 1; i >= 0; i--) {
+    const p = protos[i];
+    p.born += dt; p.pulse += dt * 4;
+    const pullR = geom.bodyHalf * 0.55;
+    for (let j = dusts.length - 1; j >= 0; j--) {
+      const d = dusts[j];
+      const dx = p.x - d.x, dy = p.y - d.y;
+      const dd = Math.hypot(dx, dy);
+      if (dd < pullR && dd > 0.01) {
+        const f = (1 - dd / pullR) * 260;
+        d.vx += (dx / dd) * f * dt; d.vy += (dy / dd) * f * dt;
+        d.vx += (-dy / dd) * f * 0.5 * dt; d.vy += (dx / dd) * f * 0.5 * dt;
+        if (dd < 7 + p.mass * 0.06) { dusts.splice(j, 1); p.mass += 1; }
+      }
+    }
+    if (p.mass >= 46 || (p.born > 11 / FAST && p.mass >= 16)) {
+      protos.splice(i, 1); ignite(p);
+    } else if (p.born > 16 / FAST) {
+      protos.splice(i, 1);
+    }
+  }
+
+  // ---- 恒星：衰老 ----
+  for (let i = stars.length - 1; i >= 0; i--) {
+    const s = stars[i];
+    if (!(pick && pick.star === s)) s.age += dt;
+    s.vx += (noise(s.seed, frame * 0.002) - 0.5) * 6 * dt;
+    s.vy += (noise(s.seed + 50, frame * 0.002) - 0.5) * 6 * dt;
+    s.vx += -s.x * 0.004 * dt * 60; s.vy += -(s.y - 50 * geom.k) * 0.004 * dt * 60;
+    s.vx *= 0.995; s.vy *= 0.995;
+    const sp = Math.hypot(s.vx, s.vy), cap = 9;
+    if (sp > cap) { s.vx *= cap / sp; s.vy *= cap / sp; }
+    s.x += s.vx * dt; s.y += s.vy * dt;
+    keepInside(s, 30);
+    if (s.age >= LIFE * 0.9 && !s.exploded) {
+      explode(s);
+      stars.splice(i, 1);
+      continue;
+    }
+    const isPicked = pick && pick.star === s;
+    const tx = isPicked ? 0 : s.x;
+    const ty = isPicked ? 30 * geom.k : s.y;
+    const ts = isPicked ? 2.6 : 1;
+    const k = 1 - Math.pow(0.001, dt);
+    s.drawX += (tx - s.drawX) * k; s.drawY += (ty - s.drawY) * k;
+    s.drawScale += (ts - s.drawScale) * k;
+  }
+
+  // ---- 星尘 ----
+  for (const d of dusts) {
+    d.vx += (noise(d.seed, frame * 0.003) - 0.5) * 8 * dt;
+    d.vy += (noise(d.seed + 50, frame * 0.003) - 0.5) * 8 * dt;
+    if (frame % 3 === 0 && densityMap.size) {
+      const i = Math.floor(d.x / CELL), j = Math.floor(d.y / CELL);
+      let bk = null, bn = 5;
+      for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) {
+        const n = densityMap.get(`${i + di},${j + dj}`) || 0;
+        if (n > bn) { bn = n; bk = { x: (i + di + 0.5) * CELL, y: (j + dj + 0.5) * CELL }; }
+      }
+      if (bk) { d.vx += (bk.x - d.x) * 0.02 * dt * 60; d.vy += (bk.y - d.y) * 0.02 * dt * 60; }
+    }
+    if (pointer.down) {
+      const dx = pointer.lx - d.x, dy = pointer.ly - d.y;
+      const dd = Math.hypot(dx, dy);
+      if (dd > 1 && dd < geom.bodyHalf * 2) {
+        const f = Math.min(420, 5200 / (dd + 24));
+        d.vx += (dx / dd) * f * dt; d.vy += (dy / dd) * f * dt;
+        d.vx += (-dy / dd) * f * 0.85 * dt; d.vy += (dx / dd) * f * 0.85 * dt;
+      }
+    }
+    d.vx *= 0.96; d.vy *= 0.96;
+    const dsp = Math.hypot(d.vx, d.vy), dcap = 130;
+    if (dsp > dcap) { d.vx *= dcap / dsp; d.vy *= dcap / dsp; }
+    d.x += d.vx * dt; d.y += d.vy * dt;
+    if (d.esc) {
+      // 逃逸中：只做颈部径向收束，不挡顶部出口
+      const R = innerR(d.y) - 4;
+      if (R > 4 && Math.abs(d.x) > R) { d.x = Math.sign(d.x) * R; d.vx *= -0.35; }
+    } else keepInside(d, 10);
+  }
+
+  if (dusts.length < 150 && frame % 20 === 0) {
+    const nd = makeDust();
+    const R = innerR(nd.y);
+    nd.x = (R - 6) * (nd.x >= 0 ? 1 : -1) * 0.95;
+    nd.vx = -nd.x * 0.05;
+    dusts.push(nd);
+  }
+
+  // ---- 瓶塞开合 + 星辰逃逸 ----
+  corkAnim += ((corkOpen ? 1 : 0) - corkAnim) * Math.min(1, rawDt * 3.5);
+  if (corkAnim > 0.4) {
+    // 星尘：标记逃逸 → 向瓶口加速 → 出瓶转屏幕坐标
+    for (let i = dusts.length - 1; i >= 0; i--) {
+      const d = dusts[i];
+      if (!d.esc && _rng() < 0.55 * dt * corkAnim) d.esc = true;
+      if (d.esc) {
+        const dx = -d.x, dy = -168 * geom.k - d.y, dd = Math.hypot(dx, dy) || 1;
+        d.vx += (dx / dd) * 300 * dt; d.vy += (dy / dd) * 300 * dt;
+        if (d.y < -158 * geom.k && Math.abs(d.x) < 28 * geom.k) {
+          dusts.splice(i, 1);
+          escapees.push(localToScreenEscape(d, d.neon ? SPRITES[d.neon] : (d.warm ? SPRITES.dustWarm : SPRITES.dustCool), rnd(3, 6), dustSpriteCol(d)));
+        }
+      }
+    }
+    // 偶尔放走一颗恒星（不打扰摘星流程）
+    starEscapeTimer -= dt;
+    if (starEscapeTimer <= 0) {
+      starEscapeTimer = rnd(7, 12);
+      if (!pick && stars.length > STAR_MIN + 1) {
+        const idx = Math.floor(_rng() * stars.length);
+        const s = stars[idx];
+        if (!s.exploded) {
+          stars.splice(idx, 1);
+          escapees.push(localToScreenEscape(s, SPRITES[s.cls], rnd(7, 11), CLASSES[s.cls].glow));
+        }
+      }
+    }
+  } else if (corkAnim < 0.05) {
+    for (const d of dusts) d.esc = false; // 关塞后取消逃逸标记，恢复瓶壁约束
+  }
+  // 逃逸粒子：减速上升 → 定居为背景星（进入背景星云）
+  for (let i = escapees.length - 1; i >= 0; i--) {
+    const e = escapees[i];
+    e.life += rawDt;
+    e.vx *= (1 - 0.5 * rawDt); e.vy *= (1 - 0.5 * rawDt);
+    e.vy -= 6 * rawDt;
+    e.x += e.vx * rawDt; e.y += e.vy * rawDt;
+    if (e.life >= e.maxLife) {
+      bgStars.push({ x: e.x, y: e.y, r: e.big ? rnd(1.8, 2.4) : rnd(0.6, 1.4), ph: e.ph, tw: e.tw, col: e.col });
+      escapees.splice(i, 1);
+    }
+  }
+
+  waves = waves.filter(w => (w.t += dt) < w.dur);
+  flashes = flashes.filter(f => (f.t += dt) < f.dur);
+
+  // ---- 背景流星 ----
+  shootTimer -= rawDt;
+  if (shootTimer <= 0) {
+    shootTimer = rnd(5, 13);
+    const fromLeft = _rng() > 0.5;
+    shooters.push({
+      x: fromLeft ? rnd(-60, width * 0.3) : rnd(width * 0.7, width + 60),
+      y: rnd(0, height * 0.3),
+      vx: (fromLeft ? 1 : -1) * rnd(260, 420),
+      vy: rnd(90, 170),
+      life: 0, maxLife: rnd(0.7, 1.2),
+    });
+  }
+  shooters = shooters.filter(s => (s.life += rawDt) < s.maxLife);
+  for (const s of shooters) { s.x += s.vx * rawDt; s.y += s.vy * rawDt; }
+
+  timeScale += (targetTimeScale - timeScale) * Math.min(1, rawDt * 6);
+
+  // 长按检测
+  if (pointer.down && pressStar && !pick && millis() - pressT > 650) {
+    if (Math.hypot(pointer.x - pressX, pointer.y - pressY) < 14 && stars.includes(pressStar)) {
+      startPick(pressStar);
+    }
+  }
+  // 摘下后延时弹命名窗（真实时间，慢动作不影响 UI）
+  if (pick && !pick.modalShown) {
+    pick.t += rawDt;
+    if (pick.t > 0.9) { pick.modalShown = true; showNameModal(); }
+  }
+}
+
+function keepInside(p, pad) {
+  const R = innerR(p.y) - pad * 0.4;
+  if (R > 4 && Math.abs(p.x) > R) {
+    p.x = Math.sign(p.x) * R;
+    p.vx *= -0.35;
+  }
+  const yBot = 170 * geom.k - pad * 0.5;
+  if (p.y > yBot) { p.y = yBot; p.vy *= -0.3; }
+  const yTop = -80 * geom.k + pad;
+  if (p.y < yTop) { p.y = yTop; p.vy *= -0.3; }
+}
+
+// ============================================================
+//  渲染
+// ============================================================
+function draw() {
+  const rawDt = Math.min(0.05, deltaTime / 1000);
+  update(rawDt * timeScale, rawDt);
+
+  const ctx = drawingContext;
+  const t = millis() * 0.001;
+  const breath = (Math.sin(t * 0.628) + 1) / 2; // 10 秒宇宙呼吸（falling-verse）
+  if (gal) gal.update(rawDt, t, breath, pointer.down && !pick);
+
+  // ---- 宇宙背景 ----
+  const bgGrad = ctx.createRadialGradient(width / 2, height * 0.45, 0, width / 2, height * 0.45, Math.max(width, height) * 0.75);
+  bgGrad.addColorStop(0, '#0b0d1a');
+  bgGrad.addColorStop(1, '#020305');
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, width, height);
+
+  // 远景星云团（瓶外，呼吸明暗）
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 0.09 + breath * 0.06;
+  const nb1 = Math.max(width, height) * 1.1;
+  ctx.drawImage(SPRITES.mistViolet, width * 0.12 - nb1 / 2, height * 0.05 - nb1 / 2, nb1, nb1);
+  ctx.globalAlpha = 0.07 + breath * 0.05;
+  ctx.drawImage(SPRITES.mistBlue, width * 0.95 - nb1 / 2, height * 0.75 - nb1 / 2, nb1 * 0.9, nb1 * 0.9);
+  ctx.globalAlpha = 0.055 + breath * 0.04;
+  ctx.drawImage(SPRITES.mistPink, width * 0.75 - nb1 / 2, height * 0.1 - nb1 / 2, nb1 * 0.7, nb1 * 0.7);
+  ctx.restore();
+
+  // 星野（呼吸 twinkle）
+  for (const st of bgStars) {
+    const a = (0.25 + 0.75 * (0.5 + 0.5 * Math.sin(st.tw * t + st.ph))) * (0.5 + breath * 0.5);
+    ctx.fillStyle = `rgba(${st.col[0]},${st.col[1]},${st.col[2]},${a.toFixed(3)})`;
+    ctx.beginPath(); ctx.arc(st.x, st.y, st.r, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // 流星
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (const s of shooters) {
+    const p = s.life / s.maxLife;
+    const a = Math.sin(p * Math.PI) * 0.7;
+    const tx = s.x - s.vx * 0.28, ty = s.y - s.vy * 0.28;
+    const lg = ctx.createLinearGradient(s.x, s.y, tx, ty);
+    lg.addColorStop(0, `rgba(255,255,255,${a.toFixed(3)})`);
+    lg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.strokeStyle = lg; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(tx, ty); ctx.stroke();
+    ctx.fillStyle = `rgba(255,255,255,${a.toFixed(3)})`;
+    ctx.beginPath(); ctx.arc(s.x, s.y, 1.6, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+
+  // 瓶后圆光
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  const halo = ctx.createRadialGradient(geom.cx, geom.cy, 0, geom.cx, geom.cy, geom.H * 0.8);
+  halo.addColorStop(0, `rgba(90, 110, 220, ${0.07 + breath * 0.04})`);
+  halo.addColorStop(1, 'rgba(90, 110, 220, 0)');
+  ctx.fillStyle = halo;
+  ctx.fillRect(0, 0, width, height);
+  ctx.restore();
+
+  ctx.save();
+  ctx.translate(geom.cx, geom.cy);
+  ctx.rotate(TILT + Math.sin(t * 0.5) * 0.02); // 倾斜摆放 + 极缓摇摆
+  const k = geom.k;
+
+  // ---- Pass 1: 玻璃体块（半透明深空渐变） ----
+  ctx.save();
+  defineBottlePath(ctx, 0);
+  const backG = ctx.createRadialGradient(-20 * k, -40 * k, 30 * k, 0, 40 * k, 260 * k);
+  backG.addColorStop(0, 'rgba(190, 215, 255, 0.10)');
+  backG.addColorStop(0.5, 'rgba(110, 130, 220, 0.12)');
+  backG.addColorStop(1, 'rgba(16, 22, 54, 0.32)');
+  ctx.fillStyle = backG;
+  ctx.fill();
+  ctx.restore();
+
+  // ---- Pass 2: 瓶内宇宙（clip） ----
+  ctx.save();
+  defineBottlePath(ctx, 2);
+  ctx.clip();
+
+  // 深空底色
+  const sky = ctx.createLinearGradient(0, -170 * k, 0, 188 * k);
+  sky.addColorStop(0, 'rgba(20, 27, 58, 0.82)');
+  sky.addColorStop(0.55, 'rgba(13, 17, 40, 0.82)');
+  sky.addColorStop(1, 'rgba(24, 18, 50, 0.82)');
+  ctx.fillStyle = sky;
+  ctx.fillRect(-120 * k, -180 * k, 240 * k, 380 * k);
+
+  ctx.globalCompositeOperation = 'lighter';
+
+  if (gal) {
+    // 3D 星系层（falling-verse 搬运：星盘斜视 → 盘即银河带）
+    ctx.globalAlpha = 1;
+    ctx.drawImage(gal.canvas, -112 * k, -108 * k, 224 * k, 296 * k);
+  } else {
+    // 2D 回退：星云雾气（呼吸 + 缓慢漂移）
+    for (const m of mists) {
+      const mx = m.x + Math.sin(t * m.drift * 6 + m.ph) * 14 * k;
+      const my = m.y + Math.cos(t * m.drift * 4 + m.ph) * 10 * k;
+      ctx.globalAlpha = 0.24 + breath * 0.12;
+      ctx.drawImage(SPRITES[m.sp], mx - m.s / 2, my - m.s / 2, m.s, m.s);
+    }
+
+    // 2D 回退：银河带亮雾（沿带方向的拉长星云）
+    ctx.save();
+    ctx.translate(band.ox, band.oy);
+    ctx.rotate(band.a);
+    ctx.globalAlpha = 0.22 + breath * 0.10;
+    ctx.drawImage(SPRITES.mistBlue, -band.len * 1.3, -band.spread * 2.2, band.len * 2.6, band.spread * 4.4);
+    ctx.globalAlpha = 0.16 + breath * 0.08;
+    ctx.drawImage(SPRITES.mistViolet, -band.len * 1.1, -band.spread * 1.6, band.len * 2.2, band.spread * 3.2);
+    ctx.restore();
+  }
+
+  // 星尘（冷暖双色）
+  for (const d of dusts) {
+    const a = (0.36 + 0.45 * (0.5 + 0.5 * Math.sin(d.tw * t * 2 + d.ph))) * (0.7 + breath * 0.4);
+    ctx.globalAlpha = a;
+    const s = d.sz * 9;
+    ctx.drawImage(d.neon ? SPRITES[d.neon] : (d.warm ? SPRITES.dustWarm : SPRITES.dustCool), d.x - s / 2, d.y - s / 2, s, s);
+  }
+
+  // 原恒星
+  for (const p of protos) {
+    const pr = 5 + p.mass * 0.16;
+    const pulse = 0.75 + 0.25 * Math.sin(p.pulse);
+    ctx.globalAlpha = 0.5 * pulse;
+    ctx.drawImage(SPRITES.yellow, p.x - pr * 3, p.y - pr * 3, pr * 6, pr * 6);
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = 'rgba(255, 244, 214, 0.95)';
+    ctx.beginPath(); ctx.arc(p.x, p.y, pr * 0.35 * pulse, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // 摘下模式压暗
+  if (pick) {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = Math.min(0.72, pick.t * 1.2);
+    ctx.fillStyle = '#05060e';
+    ctx.fillRect(-120 * k, -180 * k, 240 * k, 380 * k);
+    ctx.globalCompositeOperation = 'lighter';
+  }
+
+  // 恒星
+  for (const s of stars) {
+    if (pick && pick.star !== s) continue;
+    const f = s.age / LIFE;
+    let rr = s.r * s.drawScale, clsKey = s.cls;
+    if (f > 0.72) {
+      const e = (f - 0.72) / 0.18;
+      rr *= 1 + e * 1.7;
+      clsKey = e > 0.55 ? 'red' : clsKey;
+      rr *= 1 + 0.08 * Math.sin(t * 20 + s.ph);
+    }
+    const tw = 0.72 + 0.28 * Math.sin(s.tw * t * 2 + s.ph);
+    const gx = s.drawX, gy = s.drawY;
+    ctx.globalAlpha = 0.85 * tw;
+    const gs = rr * 9;
+    ctx.drawImage(SPRITES[clsKey], gx - gs / 2, gy - gs / 2, gs, gs);
+    ctx.globalAlpha = 0.3 * tw;
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+    ctx.lineWidth = 0.8;
+    const sp = rr * 4.2;
+    ctx.beginPath();
+    ctx.moveTo(gx - sp, gy); ctx.lineTo(gx + sp, gy);
+    ctx.moveTo(gx, gy - sp); ctx.lineTo(gx, gy + sp);
+    ctx.stroke();
+    ctx.globalAlpha = 0.95;
+    ctx.fillStyle = 'rgba(255,255,255,0.98)';
+    ctx.beginPath(); ctx.arc(gx, gy, rr * 0.5, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // 冲击波环
+  for (const w of waves) {
+    const wt = w.t / w.dur;
+    const r = w.maxR * (1 - Math.pow(1 - wt, 2.2));
+    const [r0, g0, b0] = CLASSES[w.cls].glow;
+    ctx.globalAlpha = (1 - wt) * 0.7;
+    ctx.strokeStyle = `rgba(${r0},${g0},${b0},1)`;
+    ctx.lineWidth = 2.5 * (1 - wt) + 0.5;
+    ctx.beginPath(); ctx.arc(w.x, w.y, r, 0, Math.PI * 2); ctx.stroke();
+  }
+
+  // 闪光
+  for (const fl of flashes) {
+    const ft = fl.t / fl.dur;
+    ctx.globalAlpha = fl.a0 * (1 - ft) * (1 - ft);
+    const fs = fl.maxR * 2 * (0.4 + ft * 0.9);
+    ctx.drawImage(SPRITES.flash, fl.x - fs / 2, fl.y - fs / 2, fs, fs);
+  }
+
+  ctx.globalAlpha = 1;
+  ctx.restore(); // 取消 clip
+
+  // ---- Pass 3: 玻璃质感（drift-bottle 三件套） ----
+  // 3a. 瓶底玻璃厚度
+  ctx.save();
+  const baseG = ctx.createLinearGradient(0, 120 * k, 0, 185 * k);
+  baseG.addColorStop(0, 'rgba(0, 0, 0, 0)');
+  baseG.addColorStop(0.5, 'rgba(10, 18, 48, 0.45)');
+  baseG.addColorStop(1, 'rgba(3, 8, 24, 0.8)');
+  ctx.fillStyle = baseG;
+  ctx.beginPath(); ctx.ellipse(0, 165 * k, 98 * k, 13 * k, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  // 3b. 菲涅尔边缘描边（横向渐变：两端暗、4%/96% 处玻璃反光）
+  ctx.save();
+  defineBottlePath(ctx, 0);
+  const edgeG = ctx.createLinearGradient(-110 * k, 0, 110 * k, 0);
+  edgeG.addColorStop(0, 'rgba(8, 14, 36, 0.65)');
+  edgeG.addColorStop(0.04, 'rgba(230, 242, 255, 0.8)');
+  edgeG.addColorStop(0.2, 'rgba(230, 242, 255, 0.06)');
+  edgeG.addColorStop(0.8, 'rgba(230, 242, 255, 0.06)');
+  edgeG.addColorStop(0.96, 'rgba(230, 242, 255, 0.5)');
+  edgeG.addColorStop(1, 'rgba(8, 14, 36, 0.55)');
+  ctx.strokeStyle = edgeG;
+  ctx.lineWidth = 3.5 * k;
+  ctx.stroke();
+  ctx.restore();
+
+  // 3c. 抛光高光带（Screen 模式 + 模糊，软化成"光"而非"条"）
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  ctx.filter = 'blur(' + Math.round(12 * k) + 'px)';
+  const sg = ctx.createLinearGradient(-100 * k, 0, -20 * k, 0);
+  sg.addColorStop(0, 'rgba(255, 255, 255, 0)');
+  sg.addColorStop(0.22, 'rgba(235, 245, 255, 0.60)');
+  sg.addColorStop(0.55, 'rgba(190, 220, 255, 0.26)');
+  sg.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  ctx.fillStyle = sg;
+  ctx.beginPath();
+  ctx.moveTo(-38 * k, -148 * k);
+  ctx.bezierCurveTo(-42 * k, -80 * k, -100 * k, -20 * k, -100 * k, 40 * k);
+  ctx.lineTo(-100 * k, 130 * k);
+  ctx.quadraticCurveTo(-96 * k, 168 * k, -60 * k, 155 * k);
+  ctx.lineTo(-60 * k, 40 * k);
+  ctx.bezierCurveTo(-60 * k, -20 * k, -23 * k, -70 * k, -23 * k, -148 * k);
+  ctx.closePath();
+  ctx.fill();
+  // 右侧窄反光带
+  const sg2 = ctx.createLinearGradient(60 * k, 0, 105 * k, 0);
+  sg2.addColorStop(0, 'rgba(255, 255, 255, 0)');
+  sg2.addColorStop(0.6, 'rgba(220, 238, 255, 0.13)');
+  sg2.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  ctx.fillStyle = sg2;
+  ctx.beginPath();
+  ctx.moveTo(66 * k, -60 * k);
+  ctx.bezierCurveTo(92 * k, -30 * k, 98 * k, 40 * k, 96 * k, 110 * k);
+  ctx.quadraticCurveTo(94 * k, 150 * k, 76 * k, 158 * k);
+  ctx.lineTo(80 * k, 30 * k);
+  ctx.bezierCurveTo(80 * k, -10 * k, 70 * k, -40 * k, 66 * k, -60 * k);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  // 3d. 瓶口金丝绳 + 软木塞
+  ctx.save();
+  ctx.strokeStyle = 'rgba(180, 140, 80, 0.9)';
+  ctx.lineWidth = 3 * k;
+  ctx.beginPath(); ctx.moveTo(-30 * k, -118 * k); ctx.lineTo(30 * k, -118 * k); ctx.stroke();
+  ctx.strokeStyle = 'rgba(215, 175, 105, 0.9)';
+  ctx.lineWidth = 2 * k;
+  ctx.beginPath(); ctx.moveTo(-30 * k, -114 * k); ctx.lineTo(30 * k, -114 * k); ctx.stroke();
+
+  const ckW = 58 * k, ckH = 24 * k;
+  ctx.save();
+  // 开塞动画：飞起悬浮在瓶口右上方 + 轻微自转 + 呼吸浮动
+  const bob = corkAnim > 0.95 ? Math.sin(t * 1.3) * 5 * k : 0;
+  ctx.translate(34 * k * corkAnim, -76 * k * corkAnim + bob);
+  ctx.rotate(0.55 * corkAnim);
+  const ckG = ctx.createLinearGradient(-ckW / 2, 0, ckW / 2, 0);
+  ckG.addColorStop(0, '#6e4322');
+  ckG.addColorStop(0.3, '#c89260');
+  ckG.addColorStop(0.7, '#a67242');
+  ckG.addColorStop(1, '#4a2612');
+  ctx.fillStyle = ckG;
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(-ckW / 2, -172 * k, ckW, ckH, 5 * k);
+  else ctx.rect(-ckW / 2, -172 * k, ckW, ckH);
+  ctx.fill();
+  // 塞顶高光
+  ctx.beginPath();
+  ctx.ellipse(0, -172 * k + ckH * 0.18, ckW * 0.38, ckH * 0.14, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255, 228, 185, 0.28)';
+  ctx.fill();
+  ctx.restore();
+  ctx.restore();
+
+  ctx.restore(); // translate
+
+  // ---- 开塞光束（屏幕空间，从瓶口沿瓶朝向泄出） ----
+  if (corkAnim > 0.03) {
+    const A = TILT + Math.sin(t * 0.5) * 0.02;
+    const mx = geom.cx + 170 * geom.k * Math.sin(A);   // R(A)·(0,-170k)
+    const my = geom.cy - 170 * geom.k * Math.cos(A);
+    const bx = Math.sin(A), by = -Math.cos(A);          // 瓶口朝向
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    const gr = ctx.createRadialGradient(mx, my, 0, mx, my, 46 * geom.k);
+    gr.addColorStop(0, `rgba(215, 232, 255, ${0.35 * corkAnim})`);
+    gr.addColorStop(1, 'rgba(215, 232, 255, 0)');
+    ctx.fillStyle = gr;
+    ctx.beginPath(); ctx.arc(mx, my, 46 * geom.k, 0, Math.PI * 2); ctx.fill();
+    const len = 160 * geom.k;
+    const beam = ctx.createLinearGradient(mx, my, mx + bx * len, my + by * len);
+    beam.addColorStop(0, `rgba(200, 222, 255, ${0.22 * corkAnim})`);
+    beam.addColorStop(1, 'rgba(200, 222, 255, 0)');
+    ctx.translate(mx, my);
+    ctx.rotate(Math.atan2(by, bx));
+    ctx.fillStyle = beam;
+    ctx.fillRect(0, -14 * geom.k * corkAnim, len, 28 * geom.k * corkAnim);
+    ctx.restore();
+  }
+
+  // ---- 逃逸星辰（屏幕空间，飞向背景星云） ----
+  if (escapees.length) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const e of escapees) {
+      const fadeIn = Math.min(1, e.life / 0.4);
+      const fadeOut = Math.min(1, Math.max(0, e.maxLife - e.life));
+      const twk = 0.6 + 0.4 * Math.sin(e.tw * t * 2 + e.ph);
+      ctx.globalAlpha = 0.9 * fadeIn * fadeOut * twk;
+      const s = e.s0;
+      ctx.drawImage(e.sp, e.x - s / 2, e.y - s / 2, s, s);
+    }
+    ctx.restore();
+  }
+
+  // ---- 暗角 ----
+  const vig = ctx.createRadialGradient(width / 2, height / 2, Math.min(width, height) * 0.36, width / 2, height / 2, Math.max(width, height) * 0.75);
+  vig.addColorStop(0, 'rgba(2, 3, 8, 0)');
+  vig.addColorStop(1, 'rgba(2, 3, 8, 0.34)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, width, height);
+}
+
+// ============================================================
+//  交互
+// ============================================================
+function toLocal(x, y) {
+  // 逆旋转（摇摆 ±0.02 rad 可忽略，用基准 TILT）
+  const dx = x - geom.cx, dy = y - geom.cy;
+  const c = Math.cos(TILT), s = Math.sin(TILT);
+  return { x: dx * c + dy * s, y: -dx * s + dy * c };
+}
+
+// 瓶内局部 → 屏幕逃逸粒子：位置随 TILT 旋转，初速度沿瓶口朝向
+function localToScreenEscape(o, sprite, life, col) {
+  const c = Math.cos(TILT), sn = Math.sin(TILT);
+  const sp = rnd(40, 90);
+  return {
+    x: geom.cx + o.x * c - o.y * sn,
+    y: geom.cy + o.x * sn + o.y * c,
+    vx: sn * sp + rnd(-25, 25),          // R(TILT)·(0,-1) = (sin, -cos)
+    vy: -c * sp + rnd(-25, 25),
+    sp: sprite, col, life: 0, maxLife: life,
+    tw: rnd(0.8, 2.2), ph: rnd(0, Math.PI * 2),
+    s0: o.r ? o.r * 5 : (o.sz || 1) * 9,
+    big: !!o.cls,
+  };
+}
+
+function dustSpriteCol(d) {
+  if (d.neon === 'dustPink') return [255, 140, 190];
+  if (d.neon === 'dustCyan') return [120, 240, 255];
+  return d.warm ? [255, 224, 170] : [190, 225, 255];
+}
+
+function pressAt(x, y) {
+  const l = toLocal(x, y);
+  // 瓶塞命中：开合（关时塞在瓶口，开时悬浮在口右上方）
+  const ckCX = 34 * geom.k * corkAnim;
+  const ckCY = -160 * geom.k - 76 * geom.k * corkAnim;
+  if (Math.abs(l.x - ckCX) < 46 * geom.k && Math.abs(l.y - ckCY) < 28 * geom.k) {
+    corkOpen = !corkOpen;
+    return;
+  }
+  pointer.down = true; pointer.x = x; pointer.y = y;
+  pointer.lx = l.x; pointer.ly = l.y;
+  pressX = x; pressY = y; pressT = millis();
+  pressStar = null;
+  for (const s of stars) {
+    if (dist(l.x, l.y, s.x, s.y) < s.r + 20) { pressStar = s; break; }
+  }
+  wakeUI();
+}
+function moveAt(x, y) {
+  pointer.x = x; pointer.y = y;
+  const l = toLocal(x, y);
+  pointer.lx = l.x; pointer.ly = l.y;
+}
+function releaseAt() {
+  pointer.down = false; pressStar = null;
+}
+
+function mousePressed() { pressAt(mouseX, mouseY); }
+function mouseDragged() { moveAt(mouseX, mouseY); }
+function mouseReleased() { releaseAt(); }
+function touchStarted() { if (touches.length) pressAt(touches[0].x, touches[0].y); return false; }
+function touchMoved() { if (touches.length) moveAt(touches[0].x, touches[0].y); return false; }
+function touchEnded() { releaseAt(); return false; }
+
+// ---------- 摘星 / 命名 / 星卡 ----------
+function startPick(s) {
+  pick = { star: s, t: 0, modalShown: false };
+  targetTimeScale = 0.1;
+  pressStar = null; pointer.down = false;
+}
+
+function showNameModal() {
+  document.getElementById('name-modal').classList.add('show');
+  const inp = document.getElementById('star-name-input');
+  inp.value = '';
+  setTimeout(() => inp.focus(), 60);
+}
+function hideModals() {
+  document.getElementById('name-modal').classList.remove('show');
+  document.getElementById('card-modal').classList.remove('show');
+}
+
+function endPick() {
+  hideModals();
+  pick = null;
+  targetTimeScale = 1;
+}
+
+function starInfo(s, name) {
+  const cls = CLASSES[s.cls];
+  const ra = ((s.x / geom.bodyHalf) * 45 + 45).toFixed(1);
+  const dec = ((geom.H * 0.5 - s.y) / geom.H * 90).toFixed(1);
+  const now = new Date();
+  return {
+    name,
+    clsName: cls.name,
+    glow: cls.glow,
+    mag: cls.mag,
+    coord: `瓶内坐标 E ${ra}° · N ${dec}°`,
+    date: `${now.getFullYear()} 年 ${now.getMonth() + 1} 月 ${now.getDate()} 日`,
+  };
+}
+
+function openCard(s, name) {
+  const info = starInfo(s, name || '未命名星');
+  const url = renderCard(info);
+  document.getElementById('card-img').src = url;
+  document.getElementById('name-modal').classList.remove('show');
+  document.getElementById('card-modal').classList.add('show');
+  document.getElementById('card-save').onclick = () => {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `星卡·${info.name}.png`;
+    a.click();
+  };
+  targetTimeScale = 0.05;
+}
+
+function renderCard(info) {
+  const W = 900, H = 1200;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  const [gr, gg, gb] = info.glow;
+
+  const bg = x.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#060a18'); bg.addColorStop(1, '#0a0716');
+  x.fillStyle = bg; x.fillRect(0, 0, W, H);
+  for (let i = 0; i < 130; i++) {
+    x.globalAlpha = rnd(0.1, 0.6);
+    x.fillStyle = '#cfe2ff';
+    x.beginPath(); x.arc(rnd(0, W), rnd(0, H), rnd(0.5, 1.6), 0, Math.PI * 2); x.fill();
+  }
+  x.globalAlpha = 1;
+
+  const serif = '"Songti SC", "STSong", "Noto Serif SC", serif';
+  x.textAlign = 'center';
+
+  x.fillStyle = 'rgba(190, 212, 240, 0.5)';
+  x.font = `26px ${serif}`;
+  x.fillText('瓶  装  宇  宙', W / 2, 96);
+  x.font = `13px ${serif}`;
+  x.fillStyle = 'rgba(150, 175, 210, 0.35)';
+  x.fillText('B O T T L E D   C O S M O S', W / 2, 128);
+
+  const cy = 460;
+  const glow = x.createRadialGradient(W / 2, cy, 0, W / 2, cy, 260);
+  glow.addColorStop(0, 'rgba(255,255,255,0.95)');
+  glow.addColorStop(0.12, `rgba(${gr},${gg},${gb},0.75)`);
+  glow.addColorStop(0.5, `rgba(${gr},${gg},${gb},0.16)`);
+  glow.addColorStop(1, `rgba(${gr},${gg},${gb},0)`);
+  x.fillStyle = glow;
+  x.fillRect(W / 2 - 260, cy - 260, 520, 520);
+  x.strokeStyle = 'rgba(255,255,255,0.5)';
+  x.lineWidth = 2;
+  x.beginPath();
+  x.moveTo(W / 2 - 190, cy); x.lineTo(W / 2 + 190, cy);
+  x.moveTo(W / 2, cy - 190); x.lineTo(W / 2, cy + 190);
+  x.stroke();
+  x.fillStyle = '#fff';
+  x.beginPath(); x.arc(W / 2, cy, 26, 0, Math.PI * 2); x.fill();
+
+  x.fillStyle = 'rgba(240, 247, 255, 0.95)';
+  x.font = `64px ${serif}`;
+  x.fillText(`「${info.name}」`, W / 2, 700);
+
+  x.font = `22px ${serif}`;
+  x.fillStyle = 'rgba(180, 202, 232, 0.75)';
+  x.fillText(`${info.clsName} · 视星等 ${info.mag}`, W / 2, 762);
+  x.fillText(info.coord, W / 2, 806);
+
+  x.fillStyle = `rgba(${gr},${gg},${gb},0.85)`;
+  x.font = `30px ${serif}`;
+  x.fillText(`这颗星今天为「${info.name}」而亮`, W / 2, 920);
+
+  x.fillStyle = 'rgba(150, 175, 210, 0.4)';
+  x.font = `20px ${serif}`;
+  x.fillText(`封存于 ${info.date}`, W / 2, 1060);
+  x.strokeStyle = 'rgba(150, 175, 210, 0.25)';
+  x.lineWidth = 1;
+  x.beginPath(); x.moveTo(W / 2 - 120, 1100); x.lineTo(W / 2 + 120, 1100); x.stroke();
+  x.font = `15px ${serif}`;
+  x.fillStyle = 'rgba(150, 175, 210, 0.3)';
+  x.fillText('—— 每只瓶子，都装着一片会呼吸的宇宙 ——', W / 2, 1136);
+
+  return c.toDataURL('image/png');
+}
+
+// ---------- UI 绑定 ----------
+function bindUI() {
+  document.getElementById('name-ok').onclick = () => {
+    if (!pick) return;
+    const v = document.getElementById('star-name-input').value.trim() || '未命名星';
+    openCard(pick.star, v);
+  };
+  document.getElementById('name-cancel').onclick = endPick;
+  document.getElementById('card-close').onclick = endPick;
+  document.getElementById('star-name-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('name-ok').click();
+  });
+}
+
+// ---------- 静置隐去 UI ----------
+function armIdleFade() {
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => {
+    document.getElementById('hint').classList.add('faded');
+    document.getElementById('footer').classList.add('faded');
+  }, 7000);
+}
+function wakeUI() {
+  document.getElementById('hint').classList.remove('faded');
+  document.getElementById('footer').classList.remove('faded');
+  armIdleFade();
+}
+</script>
+</body>
+</html>

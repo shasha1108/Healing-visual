@@ -2,11 +2,12 @@
   "repo": "shasha1108/healing-visual-lab",
   "url": "https://github.com/shasha1108/healing-visual-lab",
   "pages": "https://shasha1108.github.io/healing-visual-lab/",
-  "total": 37,
+  "total": 38,
   "updated": "2026-08-07",
   "description": "Interactive healing H5 experiments — Three.js WebGL, Canvas 2D, GLSL shaders, Web Audio, GSAP, creative coding for emotional design. Most works load Three.js r128 via CDN; silent-translator is the only zero-dependency work.",
   "tech_landscape": {
     "threejs": [
+      "bottled-cosmos",
       "tide-keeping-station",
       "falling-verse",
       "unbound-mind",
@@ -20,6 +21,7 @@
       "layered-mountains"
     ],
     "canvas_2d": [
+      "bottled-cosmos",
       "eternal-bloom",
       "sealed-summer-jar",
       "moon-cat",
@@ -128,6 +130,7 @@
       "inkmeditation"
     ],
     "touch_interaction": [
+      "bottled-cosmos",
       "eternal-bloom",
       "sealed-summer-jar",
       "moon-cat",
@@ -163,6 +166,7 @@
       "silent-translator"
     ],
     "p5js": [
+      "bottled-cosmos",
       "eternal-bloom",
       "sealed-summer-jar",
       "moon-cat",
@@ -1324,6 +1328,43 @@
         "layered-mountains.jpg"
       ],
       "date": "2026-06-11"
+    },
+    {
+      "slug": "bottled-cosmos",
+      "title_en": "BOTTLED COSMOS",
+      "title_zh": "瓶装宇宙",
+      "tagline": "把整个宇宙装进一只玻璃瓶——每颗恒星的一生，只有三十秒。",
+      "tech": [
+        "p5.js",
+        "Three.js",
+        "Canvas 2D"
+      ],
+      "render": "WebGL (Three.js)",
+      "has_audio": false,
+      "has_touch": true,
+      "particle_count": "N/A",
+      "dependencies": 2,
+      "healing_domain": "existential",
+      "keywords": [
+        "p5.js",
+        "canvas 2d",
+        "three.js",
+        "webgl",
+        "touch interaction"
+      ],
+      "use_cases": [
+        "p5.js",
+        "canvas 2d",
+        "three.js",
+        "webgl",
+        "touch interaction"
+      ],
+      "files": [
+        "bottled-cosmos.html",
+        "bottled-cosmos.md",
+        "bottled-cosmos_1.gif"
+      ],
+      "date": "2026-08-07"
     }
   ]
 }
