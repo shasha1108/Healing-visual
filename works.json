@@ -21,7 +21,6 @@
       "layered-mountains"
     ],
     "canvas_2d": [
-      "bottled-cosmos",
       "eternal-bloom",
       "sealed-summer-jar",
       "moon-cat",
@@ -52,6 +51,7 @@
       "cosmic-recollection"
     ],
     "webgl_glsl": [
+      "bottled-cosmos",
       "tide-keeping-station",
       "falling-verse",
       "unbound-mind",
@@ -130,8 +130,8 @@
       "inkmeditation"
     ],
     "touch_interaction": [
-      "bottled-cosmos",
       "eternal-bloom",
+      "bottled-cosmos",
       "sealed-summer-jar",
       "moon-cat",
       "the-old-signal",
@@ -166,8 +166,8 @@
       "silent-translator"
     ],
     "p5js": [
-      "bottled-cosmos",
       "eternal-bloom",
+      "bottled-cosmos",
       "sealed-summer-jar",
       "moon-cat",
       "the-old-signal",
@@ -226,6 +226,43 @@
         "eternal-bloom.html",
         "eternal-bloom.md",
         "eternal-bloom_1.gif"
+      ],
+      "date": "2026-08-07"
+    },
+    {
+      "slug": "bottled-cosmos",
+      "title_en": "BOTTLED COSMOS",
+      "title_zh": "瓶装宇宙",
+      "tagline": "把整个宇宙装进一只玻璃瓶——每颗恒星的一生，只有三十秒。",
+      "tech": [
+        "p5.js",
+        "Three.js",
+        "Canvas 2D"
+      ],
+      "render": "WebGL (Three.js)",
+      "has_audio": false,
+      "has_touch": true,
+      "particle_count": "N/A",
+      "dependencies": 2,
+      "healing_domain": "existential",
+      "keywords": [
+        "p5.js",
+        "canvas 2d",
+        "three.js",
+        "webgl",
+        "touch interaction"
+      ],
+      "use_cases": [
+        "p5.js",
+        "canvas 2d",
+        "three.js",
+        "webgl",
+        "touch interaction"
+      ],
+      "files": [
+        "bottled-cosmos.html",
+        "bottled-cosmos.md",
+        "bottled-cosmos_1.gif"
       ],
       "date": "2026-08-07"
     },
@@ -1328,43 +1365,6 @@
         "layered-mountains.jpg"
       ],
       "date": "2026-06-11"
-    },
-    {
-      "slug": "bottled-cosmos",
-      "title_en": "BOTTLED COSMOS",
-      "title_zh": "瓶装宇宙",
-      "tagline": "把整个宇宙装进一只玻璃瓶——每颗恒星的一生，只有三十秒。",
-      "tech": [
-        "p5.js",
-        "Three.js",
-        "Canvas 2D"
-      ],
-      "render": "WebGL (Three.js)",
-      "has_audio": false,
-      "has_touch": true,
-      "particle_count": "N/A",
-      "dependencies": 2,
-      "healing_domain": "existential",
-      "keywords": [
-        "p5.js",
-        "canvas 2d",
-        "three.js",
-        "webgl",
-        "touch interaction"
-      ],
-      "use_cases": [
-        "p5.js",
-        "canvas 2d",
-        "three.js",
-        "webgl",
-        "touch interaction"
-      ],
-      "files": [
-        "bottled-cosmos.html",
-        "bottled-cosmos.md",
-        "bottled-cosmos_1.gif"
-      ],
-      "date": "2026-08-07"
     }
   ]
 }
