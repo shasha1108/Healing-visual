@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>纸船放行 · Paper Boat Release</title>
+<!--
+  纸船放行（paper-boat-release）
+  一只药剂瓶里折着七只纸船，每只船舱里有一点光。
+  点开瓶塞，它们一只只漂进夜河，变成河灯——每只离开前都会回头看一眼。
+
+  创作 brief：paper-boat-release/brief.md
+  技术血统：glass-bottle-kit.md（药剂瓶路径 / innerR / 三 pass / 逃逸系统 / 提亮参数）
+
+  ============ 坐标约定（写死，全文件遵守）============
+  - 瓶内世界：瓶内局部坐标系，原点 = 瓶路径原点（translate(cx,cy) 后），+y 向下。
+    物理与内容永远不感知倾斜（TILT 只发生在渲染层）。
+  - 单位空间：瓶形定义在「单位空间」（颈 ±30、身 ±108、底 188），渲染 × geom.k。
+    innerR(y) 输入输出都是【局部像素】（内部除 k 查表再乘回）。
+  - 屏幕层：逃逸纸船越线后转屏幕坐标，转换用【固定 TILT】（不含摇摆）：
+      sx = cx + x·cosT - y·sinT ; sy = cy + x·sinT + y·cosT
+    逆变换（toLocal）：x = dx·cosT + dy·sinT ; y = -dx·sinT + dy·cosT
+  - 瓶口朝向（屏幕）= R(TILT)·(0,-1) = (sin TILT, -cos TILT)
+  =====================================================
+-->
+<style>
+  html, body { margin: 0; padding: 0; overflow: hidden; background: #04060e; height: 100%; }
+  canvas { display: block; }
+  #interact-layer { position: fixed; inset: 0; z-index: 5; touch-action: none; }
+  #hint {
+    position: fixed; left: 0; right: 0; bottom: 4.5%; z-index: 6;
+    text-align: center; pointer-events: none;
+    font-family: "Songti SC", "STSong", "Noto Serif SC", serif;
+    font-size: 14px; letter-spacing: 0.35em; text-indent: 0.35em;
+    color: rgba(232, 226, 205, 0.72);
+    transition: opacity 1.6s ease;
+  }
+  #hint.faded { opacity: 0.32; }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+<script>window.p5 || document.write('<script src="https://bootcdn.net/ajax/libs/p5.js/1.9.0/p5.min.js"><\/script>')</script>
+</head>
+<body>
+<div id="interact-layer"></div>
+<div id="hint">点开瓶塞，放纸船入河</div>
+<script>
+'use strict';
+
+// ================= URL 测试钩子 =================
+// ?seed=N      固定随机布局（默认 20260807，确定性）
+// ?fast=N      放行/折船节奏加速 N 倍
+// ?opencork=1  直达开塞终态 + 预撒 3 盏河灯 + 1 只船停在瓶口（headless 静态验证）
+// ?boats=N     初始瓶内船数（验证折船再生：?boats=5&warp=13）
+// ?warp=N      setup 时先以 1/60 步长模拟 N 秒（rAF 动画在 headless 不可验的兜底）
+const Q = new URLSearchParams(location.search);
+const SEED = parseInt(Q.get('seed') || '20260807', 10);
+const FAST = Math.max(1, parseFloat(Q.get('fast') || '1'));
+const OPEN_CORK = Q.get('opencork') === '1';
+const START_BOATS = Math.max(0, Math.min(7, parseInt(Q.get('boats') || '7', 10)));
+const WARP = Math.max(0, parseFloat(Q.get('warp') || '0'));
+
+// ================= 确定性随机 =================
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const rng = mulberry32(SEED);
+const rnd = (a, b) => a + rng() * (b - a);
+
+// ================= 全局状态 =================
+const TILT = -0.5;            // 弧度，负 = 上方向左倾（渲染层 only）
+const N_BOATS = 7;            // 瓶内目标船数（世界守恒）
+const WATERY_U = 60;          // 瓶内水面高度（单位空间）
+
+let geom = null;
+let t = 0;
+let boats = [];               // 瓶内/逃逸中的纸船（瓶内局部坐标）
+let outBoats = [];            // 越线后的纸船（屏幕坐标）
+let lanterns = [];            // 定居河灯（屏幕坐标）
+let ripples = [];             // 屏幕空间涟漪
+let corkOpen = false, corkAnim = 0;
+let escTimer = 1.0;           // 放行节奏（依次，非同时）
+let foldTimer = rnd(10, 15);  // 折船再生计时（10-15s）
+let foldState = null;         // { t: 0→1 } 折纸动画
+let escCount = 0;             // 已放行计数（音阶顺序拾音）
+let hintFaded = false;
+
+// ================= 几何（单位空间 × k，抄 glass-bottle-kit） =================
+function buildGeom() {
+  // k 由旋转后包围盒反推：TILT=-0.5 时水平半幅 185（单位空间）、垂直半幅 217。
+  // 窄屏由宽度主导（手机竖屏必触），宽屏由高度/780 上限主导。
+  const k = Math.min(windowWidth * 0.90 / 370, windowHeight * 0.86 / 434, 780 / 400);
+  return {
+    k, cx: windowWidth / 2, cy: windowHeight * 0.52,
+    get H() { return this.k * 400; }, bodyHalf: 108 * k
+  };
+}
+
+// 内壁半径（局部像素）：唯一边界权威——物理约束、高光派生全走它
+function innerR(y) {
+  const k = geom.k, u = y / k;
+  let R;
+  if (u < -105) R = 30;                                                        // 颈
+  else if (u < 10) { const tt = (u + 105) / 115, s = tt * tt * (3 - 2 * tt); R = 30 + 78 * s; } // 肩 smoothstep
+  else if (u <= 135) R = 108;                                                  // 身
+  else { const tt = Math.min(1, (u - 135) / 53); R = 108 * Math.sqrt(Math.max(0, 1 - tt * tt)); } // 圆底
+  return Math.max(0, (R - 7) * k);
+}
+
+function defineBottlePath(ctx, inset) {
+  const k = geom.k, i = (inset || 0) * k;
+  ctx.beginPath();
+  ctx.moveTo(-30 * k + i, -156 * k);
+  ctx.lineTo(-30 * k + i, -105 * k);
+  ctx.bezierCurveTo(-30 * k + i, -60 * k, -108 * k - i, -35 * k, -108 * k - i, 30 * k);
+  ctx.lineTo(-108 * k - i, 135 * k);
+  ctx.quadraticCurveTo(-108 * k - i, 178 * k - i * 0.5, -58 * k, 178 * k - i);
+  ctx.quadraticCurveTo(0, 188 * k - i, 58 * k, 178 * k - i);
+  ctx.quadraticCurveTo(108 * k + i, 178 * k - i * 0.5, 108 * k + i, 135 * k);
+  ctx.lineTo(108 * k + i, 30 * k);
+  ctx.bezierCurveTo(108 * k + i, -35 * k, 30 * k - i, -60 * k, 30 * k - i, -105 * k);
+  ctx.lineTo(30 * k - i, -156 * k);
+  ctx.closePath();
+}
+
+// 屏幕 → 瓶内局部（逆旋转，摇摆 ±0.02 可忽略，用基准 TILT）
+function toLocal(x, y) {
+  const dx = x - geom.cx, dy = y - geom.cy;
+  const c = Math.cos(TILT), s = Math.sin(TILT);
+  return { x: dx * c + dy * s, y: -dx * s + dy * c };
+}
+// 瓶内局部 → 屏幕（固定 TILT，与 toLocal 对称）
+function localToScreen(x, y) {
+  const c = Math.cos(TILT), s = Math.sin(TILT);
+  return { x: geom.cx + x * c - y * s, y: geom.cy + x * s + y * c };
+}
+
+// ================= 音频（Web Audio，手势内 resume） =================
+let AC = null, master = null, droneFilter = null;
+function initAudio() {
+  if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
+  try {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    master = AC.createGain();
+    master.gain.value = 0;
+    master.connect(AC.destination);
+    master.gain.linearRampToValueAtTime(0.30, AC.currentTime + 1.8);
+    // 水声 drone：双振荡 + 低通
+    const o1 = AC.createOscillator(), o2 = AC.createOscillator();
+    o1.frequency.value = 96; o2.frequency.value = 144; o2.detune.value = 4;
+    droneFilter = AC.createBiquadFilter();
+    droneFilter.type = 'lowpass'; droneFilter.frequency.value = 420;
+    const g = AC.createGain(); g.gain.value = 0.045;
+    o1.connect(g); o2.connect(g); g.connect(droneFilter); droneFilter.connect(master);
+    o1.start(); o2.start();
+  } catch (e) { AC = null; }
+}
+function tone(freq, vol, dur, type, when) {
+  if (!AC) return;
+  const t0 = AC.currentTime + (when || 0);
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = type || 'sine'; o.frequency.value = freq;
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(vol, t0 + 0.03);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g); g.connect(master);
+  o.start(t0); o.stop(t0 + dur + 0.05);
+}
+const PENTA = [432, 485, 544, 648, 727];      // 五声音阶，按放行顺序拾音
+function soundCork()   { tone(150, 0.15, 0.16, 'triangle'); tone(330, 0.05, 0.10, 'sine', 0.02); }
+function soundDepart() { tone(PENTA[escCount % PENTA.length], 0.11, 2.2); }                          // 离瓶
+function soundHold()   { tone(PENTA[escCount % PENTA.length] * Math.pow(2, -1 / 12), 0.09, 2.0); }   // 回头一停：低半度
+function soundSettle() { tone(1296, 0.04, 2.4); }
+function soundKnock()  { tone(196, 0.07, 0.5, 'triangle'); }
+
+// ================= 世界初始化 =================
+function waterY() { return WATERY_U * geom.k; }
+
+function makeBoat(x) {
+  return {
+    x: x, y: waterY(), vx: 0, vy: 0,
+    tx: x,                          // 目标槽位
+    ph: rnd(0, Math.PI * 2),        // 摇晃相位
+    tilt: 0, rock: 0,               // 倾斜与受激摆动
+    state: 'inside',                // inside | esc | hold
+    holdT: 0, holdDur: rnd(0.45, 0.6),
+    foldT: 1                        // 折纸进度（1 = 已完成）
+  };
+}
+
+function relayoutSlots() {
+  const inside = boats.filter(b => b.state === 'inside').sort((a, b) => a.x - b.x);
+  const n = inside.length;
+  if (!n) return;
+  // 槽位铺满水面（不留死区），奇偶两排错位出前后景深
+  const span = Math.max(geom.k * 30, innerR(waterY()) - 16 * geom.k);
+  inside.forEach((b, i) => {
+    b.tx = n === 1 ? 0 : -span + (2 * span * i) / (n - 1);
+    b.yOff = (i % 2) * 5 * geom.k;      // 奇数位靠后半格
+    b.sz = (i % 2) ? 0.88 : 1;
+  });
+}
+
+function initWorld() {
+  boats = []; outBoats = []; lanterns = []; ripples = [];
+  for (let i = 0; i < START_BOATS; i++) boats.push(makeBoat(0));
+  boats.forEach(b => { b.x = rnd(-geom.k * 55, geom.k * 55); });
+  relayoutSlots();
+  boats.forEach(b => { b.x = b.tx + rnd(-8, 8) * geom.k; });
+  foldState = null;
+  foldTimer = rnd(10, 15);
+  if (OPEN_CORK) {
+    // 直达开塞终态：预撒 3 盏河灯 + 1 只船停在瓶口（headless 静态验证钩子）
+    corkOpen = true; corkAnim = 1;
+    for (let i = 0; i < 3; i++) settleLantern(rnd(0.12, 0.88) * windowWidth, riverY() + rnd(-26, 26), true);
+    if (boats.length) {
+      const b = boats[0];
+      b.state = 'hold'; b.x = 0; b.y = -158 * geom.k; b.holdT = 0;
+    }
+  }
+}
+
+function riverY() { return windowHeight * 0.68; }
+
+function settleLantern(x, y, silent) {
+  lanterns.push({ x, y, ph: rnd(0, Math.PI * 2), tw: rnd(0.5, 1.4), click: 0, born: t });
+  if (!silent) soundSettle();
+}
+
+// ================= 更新 =================
+function update(dt, rawDt) {
+  // 瓶塞缓动
+  corkAnim += ((corkOpen ? 1 : 0) - corkAnim) * Math.min(1, rawDt * 3.5);
+
+  // 放行节奏：开塞且无活跃逃逸船时，依次标记（每 1.2-2s/FAST 一只）
+  const activeEsc = boats.some(b => b.state === 'esc' || b.state === 'hold');
+  if (corkAnim > 0.6 && !activeEsc) {
+    escTimer -= dt;
+    if (escTimer <= 0) {
+      const inside = boats.filter(b => b.state === 'inside');
+      if (inside.length) {
+        // 选最靠上的（离瓶口最近），依次放行有秩序感
+        inside.sort((a, b) => a.y - b.y);
+        inside[0].state = 'esc';
+      }
+      escTimer = rnd(1.2, 2.0) / FAST;
+    }
+  }
+
+  // 纸船状态机
+  for (const b of boats) {
+    if (b.state === 'inside') {
+      // 槽位漂移 + 摇晃
+      b.vx += (b.tx - b.x) * 0.6 * dt;
+      b.vx *= (1 - 1.5 * dt);
+      b.x += b.vx * dt;
+      const xMax = Math.max(0, innerR(waterY()) - 12 * geom.k);
+      if (Math.abs(b.x) > xMax) { b.x = Math.sign(b.x) * xMax; b.vx = 0; }
+      b.y = waterY() + (b.yOff || 0) + Math.sin(t * 1.4 + b.ph) * 2.2 * geom.k;
+      b.rock *= Math.pow(0.90, dt * 60);
+      b.tilt = Math.sin(t * 1.1 + b.ph) * 0.05 + b.rock;
+    } else if (b.state === 'esc') {
+      // 向瓶口加速；只做颈部径向收束，跳过 yTop（kit 踩过的坑：yTop 会挡死出口）
+      const tx = 0, ty = -168 * geom.k;
+      const dx = tx - b.x, dy = ty - b.y, dd = Math.hypot(dx, dy) || 1;
+      b.vx += (dx / dd) * 300 * dt; b.vy += (dy / dd) * 300 * dt;
+      b.vx *= (1 - 1.2 * dt); b.vy *= (1 - 1.2 * dt);
+      b.x += b.vx * dt; b.y += b.vy * dt;
+      const rMax = Math.max(0, innerR(b.y) - 10 * geom.k);
+      if (Math.abs(b.x) > rMax) { b.x = Math.sign(b.x) * rMax; b.vx *= -0.3; }
+      b.tilt += (0 - b.tilt) * Math.min(1, dt * 3);
+      // 到达瓶口 → 回头一停
+      if (b.y < -152 * geom.k && Math.abs(b.x) < 30 * geom.k) {
+        b.state = 'hold'; b.holdT = 0;
+        b.holdDur = rnd(0.45, 0.6) / Math.sqrt(FAST);
+        soundHold();
+      }
+    } else if (b.state === 'hold') {
+      // 瓶口悬停 + 轻晃——全作唯一允许破坏流畅感的地方（反预期记忆点）
+      b.holdT += dt;
+      b.x += (0 - b.x) * Math.min(1, dt * 4);
+      b.y += (-158 * geom.k - b.y) * Math.min(1, dt * 4);
+      b.tilt = Math.sin(t * 9) * 0.14;
+      if (b.holdT >= b.holdDur) {
+        // 越线 → 屏幕坐标，初速沿瓶口朝向 R(TILT)·(0,-1)
+        const s = localToScreen(b.x, b.y - 10 * geom.k);
+        const sp = rnd(40, 90);
+        outBoats.push({
+          x: s.x, y: s.y,
+          vx: Math.sin(TILT) * sp + rnd(-14, 14),
+          vy: -Math.cos(TILT) * sp,
+          yTarget: riverY() + rnd(-30, 30),
+          rot: b.tilt, ph: b.ph, age: 0, fade: 1
+        });
+        boats.splice(boats.indexOf(b), 1);
+        escCount++;
+        soundDepart();
+        relayoutSlots();
+        break; // splice 后中断本轮遍历
+      }
+    }
+  }
+
+  // 逃逸纸船（屏幕空间）：上浮 → 滑翔向河面 → 减速 → 定居河灯
+  for (let i = outBoats.length - 1; i >= 0; i--) {
+    const o = outBoats[i];
+    o.age += rawDt;
+    o.vy += (o.yTarget - o.y) * 1.5 * rawDt;
+    o.vx += Math.sign(o.x - geom.cx) * 4 * rawDt;   // 向两侧漂开，不遮瓶子
+    o.vx *= (1 - 0.35 * rawDt); o.vy *= (1 - 0.6 * rawDt);
+    o.x += o.vx * rawDt; o.y += o.vy * rawDt;
+    o.rot *= (1 - 1.5 * rawDt);
+    if (o.age > 2.2 && Math.abs(o.yTarget - o.y) < 16 && Math.hypot(o.vx, o.vy) < 10) {
+      o.fade -= rawDt * 1.5;   // 船体淡出略快，河灯接力亮起（避免灰船残影）
+      if (o.fade <= 0) {
+        settleLantern(o.x, o.y, false);
+        outBoats.splice(i, 1);
+      }
+    }
+  }
+
+  // 折船再生（世界守恒）：关塞且瓶内不足 N_BOATS 时，瓶底纸堆 10-15s 折出一只
+  const insideCount = boats.filter(b => b.state === 'inside' || b.state === 'folding').length;
+  if (corkAnim < 0.05 && insideCount < N_BOATS) {
+    if (!foldState) {
+      foldTimer -= dt;
+      if (foldTimer <= 0) foldState = { t: 0 };
+    } else {
+      foldState.t += dt / (1.4 / FAST);
+      if (foldState.t >= 1) {
+        const nb = makeBoat(rnd(-8, 8) * geom.k);
+        nb.y = 150 * geom.k;                       // 从瓶底纸堆浮起
+        nb.state = 'inside';
+        boats.push(nb);
+        relayoutSlots();
+        foldState = null;
+        foldTimer = rnd(10, 15) / FAST;
+        tone(648, 0.04, 1.2);
+      }
+    }
+  } else if (!foldState) {
+    foldTimer = Math.max(foldTimer, 2);            // 开塞期间暂停计时但不重置
+  }
+
+  // 河灯点击脉冲衰减 + 涟漪扩散
+  for (const l of lanterns) l.click *= Math.pow(0.94, rawDt * 60);
+  for (let i = ripples.length - 1; i >= 0; i--) {
+    const r = ripples[i];
+    r.r += 46 * rawDt; r.a -= 0.5 * rawDt;
+    if (r.a <= 0) ripples.splice(i, 1);
+  }
+
+  // drone 滤波跟随活跃度（视觉与音频同一驱动源）
+  if (droneFilter && AC) {
+    const act = Math.min(1, corkAnim * 0.7 + outBoats.length * 0.3 + (activeEsc ? 0.3 : 0));
+    droneFilter.frequency.setTargetAtTime(420 + 300 * act, AC.currentTime, 0.4);
+  }
+}
+
+// ================= 渲染 =================
+function render() {
+  const ctx = drawingContext;
+  const k = geom.k, cx = geom.cx, cy = geom.cy;
+  const breath = (Math.sin(t * 0.628) + 1) / 2;
+
+  drawBackground(ctx, breath);
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(TILT + Math.sin(t * 0.5) * 0.02);   // 倾斜 + 极缓摇摆（物理不感知）
+
+  drawGlassBody(ctx, k);                          // Pass 1 玻璃体块
+  drawInterior(ctx, k);                           // Pass 2 clip 瓶内世界
+  drawGlassFinish(ctx, k, breath);                // Pass 3 瓶底/菲涅尔/模糊高光
+  drawRopeAndCork(ctx, k);                        // 金丝绳 + 软木塞
+
+  ctx.restore();
+
+  drawOutBoats(ctx, k);                           // 屏幕空间逃逸纸船
+  drawMouthBeam(ctx, k, breath);                  // 开塞瓶口光束（屏幕空间）
+  drawVignette(ctx);
+}
+
+// ---- 背景：夜河 / 波光视差 / 远岸 / 河灯 / 涟漪 ----
+function drawBackground(ctx, breath) {
+  const w = windowWidth, h = windowHeight;
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, '#0b1226'); g.addColorStop(0.55, '#0a1020'); g.addColorStop(1, '#04060e');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+
+  // 瓶后圆光：把瓶子从背景里托出来
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  const aura = ctx.createRadialGradient(geom.cx, geom.cy, 0, geom.cx, geom.cy, geom.H * 0.8);
+  aura.addColorStop(0, `rgba(90,110,220,${0.07 + breath * 0.04})`);
+  aura.addColorStop(1, 'rgba(90,110,220,0)');
+  ctx.fillStyle = aura; ctx.fillRect(0, 0, w, h);
+  ctx.restore();
+
+  // 远岸剪影 + 别处的灯（告诉用户：船要去的地方存在）
+  ctx.fillStyle = 'rgba(8,13,28,0.92)';
+  ctx.beginPath();
+  ctx.moveTo(0, h * 0.60);
+  ctx.quadraticCurveTo(w * 0.22, h * 0.565, w * 0.45, h * 0.598);
+  ctx.quadraticCurveTo(w * 0.72, h * 0.628, w, h * 0.585);
+  ctx.lineTo(w, h * 0.68); ctx.lineTo(0, h * 0.68);
+  ctx.closePath(); ctx.fill();
+  const farLights = [[0.14, 0.585], [0.82, 0.578], [0.66, 0.605]];
+  for (const [fx, fy] of farLights) {
+    const p = 0.5 + 0.5 * Math.sin(t * 0.9 + fx * 20);
+    ctx.fillStyle = `rgba(255,200,120,${0.28 + 0.22 * p})`;
+    ctx.beginPath(); ctx.arc(w * fx, h * fy, 2.2, 0, 7); ctx.fill();
+  }
+
+  // 波光视差带（3 层，不同速度/透明度）
+  for (let i = 0; i < 3; i++) {
+    const y0 = riverY() + i * h * 0.045;
+    const amp = 5 + i * 3, spd = 14 + i * 9;
+    ctx.strokeStyle = `rgba(130,170,235,${0.11 - i * 0.025})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let x = 0; x <= w; x += 8) {
+      const y = y0 + Math.sin((x + t * spd) * 0.02 + i * 2.4) * amp;
+      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  // 河灯层（放行的结果，会话内长明）
+  for (const l of lanterns) {
+    const pulse = (0.55 + 0.45 * Math.sin(t * l.tw + l.ph)) * 0.8 + l.click * 0.9;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const lg = ctx.createRadialGradient(l.x, l.y, 0, l.x, l.y, 22);
+    lg.addColorStop(0, `rgba(255,214,140,${0.45 * pulse})`);
+    lg.addColorStop(1, 'rgba(255,214,140,0)');
+    ctx.fillStyle = lg; ctx.beginPath(); ctx.arc(l.x, l.y, 22, 0, 7); ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = `rgba(255,236,190,${Math.min(1, pulse)})`;
+    ctx.beginPath(); ctx.arc(l.x, l.y, 3, 0, 7); ctx.fill();
+    ctx.fillStyle = `rgba(255,196,112,${0.26 * pulse})`;   // 水面倒影
+    ctx.beginPath(); ctx.ellipse(l.x, l.y + 9, 14, 4, 0, 0, 7); ctx.fill();
+  }
+
+  // 涟漪（点击河灯的回应）
+  for (const r of ripples) {
+    ctx.strokeStyle = `rgba(255,220,160,${r.a})`;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.ellipse(r.x, r.y, r.r, r.r * 0.38, 0, 0, 7); ctx.stroke();
+  }
+}
+
+// ---- Pass 1 玻璃体块（径向渐变底色，不 clip） ----
+function drawGlassBody(ctx, k) {
+  defineBottlePath(ctx, 0);
+  const g = ctx.createRadialGradient(-30 * k, -60 * k, 20 * k, 0, 40 * k, 210 * k);
+  g.addColorStop(0, 'rgba(190,215,255,0.10)');
+  g.addColorStop(0.55, 'rgba(60,80,140,0.12)');
+  g.addColorStop(1, 'rgba(16,22,54,0.32)');   // 压暗 ≤0.32（信息流提亮纪律）
+  ctx.fillStyle = g;
+  ctx.fill();
+}
+
+// ---- Pass 2 瓶内世界（clip 内） ----
+function drawInterior(ctx, k) {
+  ctx.save();
+  defineBottlePath(ctx, 2);          // 内缩 2k，防内容渗进菲涅尔描边
+  ctx.clip();
+
+  // 瓶内底色（提亮参数：≥ rgba(20,27,58,0.82) 档）
+  defineBottlePath(ctx, 0);
+  ctx.fillStyle = 'rgba(20,27,58,0.82)';
+  ctx.fill();
+
+  // 浅水层
+  const wy = waterY();
+  const wg = ctx.createLinearGradient(0, wy, 0, 188 * k);
+  wg.addColorStop(0, 'rgba(26,50,96,0.60)');
+  wg.addColorStop(1, 'rgba(8,16,42,0.80)');
+  ctx.fillStyle = wg;
+  ctx.fillRect(-120 * k, wy, 240 * k, 200 * k);
+
+  // 水面波线
+  ctx.strokeStyle = 'rgba(150,205,255,0.30)';
+  ctx.lineWidth = 1.2 * k;
+  ctx.beginPath();
+  for (let x = -108 * k; x <= 108 * k; x += 6 * k) {
+    const y = wy + Math.sin(x / (14 * k) + t * 1.8) * 1.6 * k;
+    x <= -108 * k + 1 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // 瓶底纸堆（再生原料，船不满时可见）
+  if (boats.filter(b => b.state === 'inside' || b.state === 'folding').length < N_BOATS) {
+    drawPaperPile(ctx, k);
+  }
+  // 折纸动画（三角面逐帧立起）
+  if (foldState) drawFolding(ctx, k, foldState.t);
+
+  // 纸船（按 y 排序，后面的盖前面的）
+  const sorted = [...boats].sort((a, b) => a.y - b.y);
+  for (const b of sorted) drawBoatLocal(ctx, k, b);
+
+  ctx.restore();
+}
+
+// ---- 纸船：折纸剪影（ hull 双面 + 中峰双面 + 船舱灯火 ） ----
+function drawBoatLocal(ctx, k, b) {
+  ctx.save();
+  ctx.translate(b.x, b.y);
+  ctx.rotate(b.tilt);
+  const s = (b.state === 'esc' || b.state === 'hold' ? 0.92 : 1) * (b.sz || 1);
+  ctx.scale(s, s);
+  const hw = 11 * k, hullD = 7.5 * k, peakH = 11 * k;
+
+  // hull：底边带中心下沉折点（折纸船的吃水弧度），左暗右亮（光源在左）
+  ctx.fillStyle = 'rgba(216,188,144,0.96)';
+  ctx.beginPath();
+  ctx.moveTo(-hw, 0); ctx.lineTo(-hw * 0.72, hullD * 0.86); ctx.lineTo(0, hullD); ctx.lineTo(0, 0);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = 'rgba(255,240,208,0.96)';
+  ctx.beginPath();
+  ctx.moveTo(0, 0); ctx.lineTo(0, hullD); ctx.lineTo(hw * 0.72, hullD * 0.86); ctx.lineTo(hw, 0);
+  ctx.closePath(); ctx.fill();
+
+  // 中峰（折纸船的标志三角，宽底座才读得出"船"）
+  ctx.fillStyle = 'rgba(255,246,222,0.96)';
+  ctx.beginPath();
+  ctx.moveTo(-hw * 0.62, 0); ctx.lineTo(0, -peakH); ctx.lineTo(0, 0);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = 'rgba(224,198,152,0.96)';
+  ctx.beginPath();
+  ctx.moveTo(0, -peakH); ctx.lineTo(hw * 0.62, 0); ctx.lineTo(0, 0);
+  ctx.closePath(); ctx.fill();
+
+  // 顶沿折线
+  ctx.strokeStyle = 'rgba(255,244,214,0.55)';
+  ctx.lineWidth = Math.max(1, 0.8 * k);
+  ctx.beginPath(); ctx.moveTo(-hw, 0); ctx.lineTo(hw, 0); ctx.stroke();
+
+  // 船舱灯火（同路径双描边：芯 + 晕，lighter 叠出体积光）
+  const flicker = 0.7 + 0.3 * Math.sin(t * 3.1 + b.ph * 3);
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = `rgba(255,196,112,${0.16 * flicker})`;
+  ctx.beginPath(); ctx.arc(0, -3 * k, 10 * k, 0, 7); ctx.fill();
+  ctx.fillStyle = `rgba(255,224,160,${0.85 * flicker})`;
+  ctx.beginPath(); ctx.arc(0, -3 * k, 2 * k, 0, 7); ctx.fill();
+  ctx.globalCompositeOperation = 'source-over';
+
+  ctx.restore();
+}
+
+// ---- 瓶底纸堆 ----
+function drawPaperPile(ctx, k) {
+  ctx.save();
+  ctx.translate(0, 158 * k);
+  const layers = [
+    { w: 26, r: -0.10, c: 'rgba(224,198,152,0.85)' },
+    { w: 22, r: 0.06, c: 'rgba(240,214,168,0.85)' },
+    { w: 17, r: -0.03, c: 'rgba(255,240,208,0.9)' }
+  ];
+  let dy = 0;
+  for (const p of layers) {
+    ctx.save();
+    ctx.translate(0, dy);
+    ctx.rotate(p.r);
+    ctx.fillStyle = p.c;
+    ctx.beginPath();   // 平铺的菱形纸
+    ctx.moveTo(-p.w * k * 0.5, 0); ctx.lineTo(0, -3.2 * k);
+    ctx.lineTo(p.w * k * 0.5, 0); ctx.lineTo(0, 3.2 * k);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+    dy -= 2.6 * k;
+  }
+  ctx.restore();
+}
+
+// ---- 折纸动画：平底菱形 → hull 立起 → 中峰升起 ----
+function drawFolding(ctx, k, ft) {
+  ctx.save();
+  ctx.translate(0, 146 * k);                        // 纸堆上方、瓶底暗色椭圆（152k+）之上
+  const hullRise = Math.min(1, ft * 2);              // 前半程立 hull
+  const peakRise = Math.max(0, (ft - 0.5) * 2);      // 后半程升中峰
+  const hw = 11 * k * (0.55 + 0.45 * hullRise);
+  const hullD = 7.5 * k * hullRise;
+  const peakH = 11 * k * peakRise;
+  const warm = 0.55 + 0.41 * hullRise;               // 早期也保持暖色可读，不发灰
+
+  // hull 与 drawBoatLocal 同形（中心下沉折点、左暗右亮），折完即无缝接班
+  ctx.fillStyle = `rgba(216,188,144,${warm})`;
+  ctx.beginPath();
+  ctx.moveTo(-hw, 0); ctx.lineTo(-hw * 0.72, hullD * 0.86); ctx.lineTo(0, hullD); ctx.lineTo(0, 0);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = `rgba(255,240,208,${warm})`;
+  ctx.beginPath();
+  ctx.moveTo(0, 0); ctx.lineTo(0, hullD); ctx.lineTo(hw * 0.72, hullD * 0.86); ctx.lineTo(hw, 0);
+  ctx.closePath(); ctx.fill();
+
+  if (peakH > 0.5) {
+    ctx.fillStyle = 'rgba(255,246,222,0.96)';
+    ctx.beginPath();
+    ctx.moveTo(-hw * 0.62, 0); ctx.lineTo(0, -peakH); ctx.lineTo(0, 0);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(224,198,152,0.96)';
+    ctx.beginPath();
+    ctx.moveTo(0, -peakH); ctx.lineTo(hw * 0.62, 0); ctx.lineTo(0, 0);
+    ctx.closePath(); ctx.fill();
+  }
+
+  // 折纸时的灯火渐亮（新生命点亮）：中峰一立起就开始发光，与定居船舱灯同构
+  const glow = Math.max(0, (ft - 0.35) / 0.65);
+  if (glow > 0) {
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = `rgba(255,196,112,${0.16 * glow})`;
+    ctx.beginPath(); ctx.arc(0, -3 * k, 10 * k, 0, 7); ctx.fill();
+    ctx.fillStyle = `rgba(255,224,160,${0.85 * glow})`;
+    ctx.beginPath(); ctx.arc(0, -3 * k, 2 * k, 0, 7); ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  ctx.restore();
+}
+
+// ---- Pass 3 玻璃质感：瓶底厚度 → 菲涅尔边缘 → 模糊高光带 ----
+function drawGlassFinish(ctx, k, breath) {
+  // 3a 瓶底厚度椭圆（压在瓶底收口处；顶缘让开纸堆/折纸区 ~153k，否则会把它压成灰色）
+  const bg = ctx.createLinearGradient(0, 160 * k, 0, 184 * k);
+  bg.addColorStop(0, 'rgba(10,18,48,0.45)');
+  bg.addColorStop(1, 'rgba(3,8,24,0.8)');
+  ctx.fillStyle = bg;
+  ctx.beginPath(); ctx.ellipse(0, 172 * k, 96 * k, 10 * k, 0, 0, 7); ctx.fill();
+
+  // 3b 菲涅尔边缘：沿瓶路径描边 3.5k，4%/96% 玻璃反光亮点（主光源在左，左亮右弱）
+  const fg = ctx.createLinearGradient(-108 * k, 0, 108 * k, 0);
+  fg.addColorStop(0, 'rgba(120,150,210,0.18)');
+  fg.addColorStop(0.04, 'rgba(230,242,255,0.8)');
+  fg.addColorStop(0.5, 'rgba(140,170,220,0.22)');
+  fg.addColorStop(0.96, 'rgba(230,242,255,0.5)');
+  fg.addColorStop(1, 'rgba(120,150,210,0.18)');
+  defineBottlePath(ctx, 0);
+  ctx.strokeStyle = fg;
+  ctx.lineWidth = 3.5 * k;
+  ctx.stroke();
+
+  // 3c 高光带：screen + 填充 bezier 长条 + blur(12k)——硬边 = 布条，模糊 = 光
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  ctx.filter = `blur(${Math.round(12 * k)}px)`;
+  // 左主光带（宽，峰 alpha 0.60，blur 后降档补偿过的值）
+  const lg = ctx.createLinearGradient(0, -96 * k, 0, 128 * k);
+  lg.addColorStop(0, 'rgba(255,255,255,0)');
+  lg.addColorStop(0.18, 'rgba(255,255,255,0.60)');
+  lg.addColorStop(0.75, 'rgba(255,255,255,0.22)');
+  lg.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = lg;
+  ctx.beginPath();
+  ctx.moveTo(-58 * k, -96 * k);
+  ctx.bezierCurveTo(-78 * k, -40 * k, -80 * k, 60 * k, -66 * k, 128 * k);
+  ctx.lineTo(-50 * k, 128 * k);
+  ctx.bezierCurveTo(-62 * k, 60 * k, -60 * k, -40 * k, -42 * k, -96 * k);
+  ctx.closePath(); ctx.fill();
+  // 右反光带（窄，峰 0.13）
+  const rg = ctx.createLinearGradient(0, -70 * k, 0, 110 * k);
+  rg.addColorStop(0, 'rgba(255,255,255,0)');
+  rg.addColorStop(0.25, 'rgba(255,255,255,0.13)');
+  rg.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = rg;
+  ctx.beginPath();
+  ctx.moveTo(58 * k, -70 * k);
+  ctx.bezierCurveTo(70 * k, -20 * k, 72 * k, 50 * k, 62 * k, 110 * k);
+  ctx.lineTo(52 * k, 110 * k);
+  ctx.bezierCurveTo(60 * k, 50 * k, 58 * k, -20 * k, 46 * k, -70 * k);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+// ---- 金丝绳 + 软木塞（含开合变换） ----
+function drawRopeAndCork(ctx, k) {
+  // 金丝绳：瓶口双描边
+  ctx.strokeStyle = 'rgba(180,140,80,0.9)';
+  ctx.lineWidth = 3 * k;
+  ctx.beginPath(); ctx.moveTo(-30 * k, -118 * k); ctx.lineTo(30 * k, -118 * k); ctx.stroke();
+  ctx.strokeStyle = 'rgba(215,175,105,0.9)';
+  ctx.lineWidth = 2 * k;
+  ctx.beginPath(); ctx.moveTo(-30 * k, -114 * k); ctx.lineTo(30 * k, -114 * k); ctx.stroke();
+
+  // 软木塞：58k×24k roundRect，4 档棕渐变；开时悬浮口右上方 + 呼吸浮动
+  ctx.save();
+  const bob = corkAnim > 0.95 ? Math.sin(t * 1.3) * 5 * k : 0;
+  ctx.translate(34 * k * corkAnim, -160 * k - 76 * k * corkAnim + bob);
+  ctx.rotate(0.55 * corkAnim);
+  const cg = ctx.createLinearGradient(0, -12 * k, 0, 12 * k);
+  cg.addColorStop(0, '#6e4322'); cg.addColorStop(0.35, '#c89260');
+  cg.addColorStop(0.7, '#a67242'); cg.addColorStop(1, '#4a2612');
+  ctx.fillStyle = cg;
+  if (ctx.roundRect) {
+    ctx.beginPath(); ctx.roundRect(-29 * k, -12 * k, 58 * k, 24 * k, 5 * k); ctx.fill();
+  } else {
+    ctx.fillRect(-29 * k, -12 * k, 58 * k, 24 * k);
+  }
+  // 塞顶椭圆高光
+  ctx.fillStyle = 'rgba(255,228,185,0.28)';
+  ctx.beginPath(); ctx.ellipse(0, -8 * k, 20 * k, 5 * k, 0, 0, 7); ctx.fill();
+  ctx.restore();
+}
+
+// ---- 屏幕空间：逃逸中的纸船 ----
+function drawOutBoats(ctx, k) {
+  for (const o of outBoats) {
+    ctx.save();
+    ctx.translate(o.x, o.y);
+    ctx.rotate(o.rot);
+    ctx.globalAlpha = Math.max(0, o.fade);
+    const s = 0.62 * k;   // 屏幕空间略缩小（远去的透视感）
+    const hw = 11 * s, hullD = 7.5 * s, peakH = 11 * s;
+    ctx.fillStyle = 'rgba(216,188,144,0.96)';
+    ctx.beginPath();
+    ctx.moveTo(-hw, 0); ctx.lineTo(-hw * 0.72, hullD * 0.86); ctx.lineTo(0, hullD); ctx.lineTo(0, 0);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(255,240,208,0.96)';
+    ctx.beginPath();
+    ctx.moveTo(0, 0); ctx.lineTo(0, hullD); ctx.lineTo(hw * 0.72, hullD * 0.86); ctx.lineTo(hw, 0);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(255,246,222,0.96)';
+    ctx.beginPath();
+    ctx.moveTo(-hw * 0.62, 0); ctx.lineTo(0, -peakH); ctx.lineTo(0, 0);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(224,198,152,0.96)';
+    ctx.beginPath();
+    ctx.moveTo(0, -peakH); ctx.lineTo(hw * 0.62, 0); ctx.lineTo(0, 0);
+    ctx.closePath(); ctx.fill();
+    const flicker = 0.7 + 0.3 * Math.sin(t * 3.1 + o.ph * 3);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = `rgba(255,196,112,${0.18 * flicker})`;
+    ctx.beginPath(); ctx.arc(0, -3 * s, 11 * s, 0, 7); ctx.fill();
+    ctx.fillStyle = `rgba(255,224,160,${0.9 * flicker})`;
+    ctx.beginPath(); ctx.arc(0, -3 * s, 2.2 * s, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+}
+
+// ---- 开塞瓶口光束（屏幕空间，screen 混合，暖色调） ----
+function drawMouthBeam(ctx, k, breath) {
+  if (corkAnim < 0.05) return;
+  const a = corkAnim;
+  const c = Math.cos(TILT), s = Math.sin(TILT);
+  const mx = geom.cx + (0 * c - (-170 * k) * s);
+  const my = geom.cy + (0 * s + (-170 * k) * c);
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  const hg = ctx.createRadialGradient(mx, my, 0, mx, my, 46 * k);
+  hg.addColorStop(0, `rgba(255,220,160,${0.35 * a})`);
+  hg.addColorStop(1, 'rgba(255,220,160,0)');
+  ctx.fillStyle = hg;
+  ctx.beginPath(); ctx.arc(mx, my, 46 * k, 0, 7); ctx.fill();
+  // 沿瓶口朝向的楔形光束
+  const dirX = s, dirY = -c;
+  const len = 160 * k, halfW = 14 * k * a;
+  const ex = mx + dirX * len, ey = my + dirY * len;
+  const px = -dirY, py = dirX;   // 垂直方向
+  const wg = ctx.createLinearGradient(mx, my, ex, ey);
+  wg.addColorStop(0, `rgba(255,220,160,${0.22 * a})`);
+  wg.addColorStop(1, 'rgba(255,220,160,0)');
+  ctx.fillStyle = wg;
+  ctx.beginPath();
+  ctx.moveTo(mx - px * halfW * 0.4, my - py * halfW * 0.4);
+  ctx.lineTo(mx + px * halfW * 0.4, my + py * halfW * 0.4);
+  ctx.lineTo(ex + px * halfW, ey + py * halfW);
+  ctx.lineTo(ex - px * halfW, ey - py * halfW);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+// ---- 暗角（≤0.34，信息流提亮纪律） ----
+function drawVignette(ctx) {
+  const w = windowWidth, h = windowHeight;
+  const g = ctx.createRadialGradient(w / 2, h * 0.5, Math.min(w, h) * 0.42, w / 2, h * 0.5, Math.max(w, h) * 0.78);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(0,0,0,0.34)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+}
+
+// ================= 交互（DOM 事件层分离 + 坐标映射） =================
+function bindInteraction() {
+  const layer = document.getElementById('interact-layer');
+  let pressing = false;
+
+  const toCanvas = (e) => {
+    const r = layer.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * windowWidth / r.width, y: (e.clientY - r.top) * windowHeight / r.height };
+  };
+
+  layer.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    initAudio();
+    pressing = true;
+    const p = toCanvas(e);
+
+    // 1) 瓶塞命中（瓶内局部坐标，开合位置随 corkAnim 移动）
+    const l = toLocal(p.x, p.y);
+    const k = geom.k;
+    const ckCX = 34 * k * corkAnim, ckCY = -160 * k - 76 * k * corkAnim;
+    if (Math.abs(l.x - ckCX) < 46 * k && Math.abs(l.y - ckCY) < 28 * k) {
+      corkOpen = !corkOpen;
+      soundCork();
+      if (!hintFaded) { document.getElementById('hint').classList.add('faded'); hintFaded = true; }
+      return;
+    }
+
+    // 2) 河灯命中（屏幕坐标）——"它还认得你"
+    for (const la of lanterns) {
+      if (Math.hypot(p.x - la.x, p.y - la.y) < 26) {
+        la.click = 1;
+        ripples.push({ x: la.x, y: la.y, r: 8, a: 0.5 });
+        tone(864, 0.07, 1.6);
+        return;
+      }
+    }
+
+    // 3) 瓶身：敲玻璃 + 搅动
+    soundKnock();
+    stirAt(l, 0.5);
+  }, { passive: false });
+
+  layer.addEventListener('pointermove', (e) => {
+    if (!pressing || !e.buttons) return;
+    e.preventDefault();
+    const p = toCanvas(e);
+    stirAt(toLocal(p.x, p.y), 0.12);
+  }, { passive: false });
+
+  const release = () => { pressing = false; };
+  layer.addEventListener('pointerup', release);
+  layer.addEventListener('pointercancel', release);
+}
+
+// clamp 吸附：触点钳进水面矩形（不做瓶形命中），范围内纸船受激摇晃
+function stirAt(l, strength) {
+  const k = geom.k;
+  const wy = waterY();
+  const xMax = Math.max(0, innerR(wy) - 14 * k);
+  const sx = Math.max(-xMax, Math.min(xMax, l.x));
+  const sy = Math.max(wy - 30 * k, Math.min(wy + 60 * k, l.y));
+  const radius = 60 * k;
+  for (const b of boats) {
+    if (b.state !== 'inside') continue;
+    const d = Math.hypot(b.x - sx, b.y - sy);
+    if (d < radius) {
+      const f = (1 - d / radius) * strength;
+      b.rock += (b.x >= sx ? 1 : -1) * f * 0.35;
+      b.vx += (b.x >= sx ? 1 : -1) * f * 40 * k;
+    }
+  }
+}
+
+// ================= p5 入口 =================
+function setup() {
+  pixelDensity(Math.min(2, window.devicePixelRatio || 1));
+  createCanvas(windowWidth, windowHeight);
+  geom = buildGeom();
+  initWorld();
+  bindInteraction();
+  // ?warp=N：以固定步长快进模拟（headless 静态验证各动画态）
+  for (let i = 0; i < Math.floor(WARP * 60); i++) { t += 1 / 60; update(1 / 60, 1 / 60); }
+}
+
+function draw() {
+  const rawDt = Math.min(0.05, deltaTime / 1000);   // dt 钳制：防切后台瞬移
+  t += rawDt;
+  update(rawDt, rawDt);
+  render();
+}
+
+function windowResized() {
+  const oldK = geom.k;
+  resizeCanvas(windowWidth, windowHeight);
+  geom = buildGeom();
+  const f = geom.k / oldK;
+  for (const b of boats) { b.x *= f; b.y *= f; b.tx *= f; b.vx *= f; b.vy *= f; }
+}
+</script>
+</body>
+</html>
