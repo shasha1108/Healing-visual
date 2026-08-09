@@ -217,6 +217,7 @@ const WEATHERS = {
 };
 
 let currentWeather = 'snow';
+let p5Ready = false;
 
 // 💥 情绪氧气舱状态
 let breatheSeconds = 60;
@@ -426,6 +427,7 @@ function setup() {
   noSmooth(); pixelDensity(1);
   drawingContext.imageSmoothingEnabled = false;
 
+  p5Ready = true;
   initSnow(); initRain(); initBubbles(); initSunDust();
 }
 
@@ -880,10 +882,12 @@ function switchWeather(wId) {
     document.getElementById('mood-txt').textContent = `心境：${cfg.name.split(' ')[1]}`;
   }
 
-  if (wId === 'snow') initSnow();
-  if (wId === 'storm') initRain();
-  if (wId === 'calm') initBubbles();
-  if (wId === 'sun') initSunDust();
+  if (p5Ready) {
+    if (wId === 'snow') initSnow();
+    if (wId === 'storm') initRain();
+    if (wId === 'calm') initBubbles();
+    if (wId === 'sun') initSunDust();
+  }
   if (audioStarted) startWeatherAudio(wId);
 }
 
