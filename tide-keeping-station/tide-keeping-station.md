@@ -19,7 +19,7 @@
   WORK_META_END
 -->
 
-![Tide-Keeping Station - preview 1](tide-keeping-station_1.gif)
+![Tide-Keeping Station - preview 1](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/tide-keeping-station/tide-keeping-station_1.gif)
 
 > 把缠成一团的事交给潮汐，它会替你拆开、带走，并留下回应。
 
@@ -40,7 +40,7 @@
 | 文件 | 说明 |
 | --- | --- |
 | `tide-keeping-station.html` | 完整可运行的 H5 互动作品，约 49KB |
-| `tide-keeping-station_1.gif` | 预览图 1 |
+| [`tide-keeping-station_1.gif`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/tide-keeping-station/tide-keeping-station_1.gif) | 预览图 1 |
 | `tide-keeping-station.md` | 本说明文件 |
 
 ## 🖱️ 交互

@@ -19,7 +19,7 @@
   WORK_META_END
 -->
 
-![The Old Signal - preview 1](the-old-signal_1.gif)
+![The Old Signal - preview 1](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/the-old-signal/the-old-signal_1.gif)
 
 > 一台信号不好的旧电视，红青两个色版错开着呼吸；你每碰它一次，它就调准一点——直到屏幕里那个旧日的自己，回头看你一眼。
 
@@ -40,7 +40,7 @@
 | 文件 | 说明 |
 | --- | --- |
 | `the-old-signal.html` | 完整可运行的 H5 互动作品，约 31KB |
-| `the-old-signal_1.gif` | 预览图 1 |
+| [`the-old-signal_1.gif`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/the-old-signal/the-old-signal_1.gif) | 预览图 1 |
 | `the-old-signal.md` | 本说明文件 |
 
 ## 🖱️ 交互

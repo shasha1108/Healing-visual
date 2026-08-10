@@ -19,7 +19,7 @@
   WORK_META_END
 -->
 
-![Aquarium 2003 - pixel fish tank with glass refraction and named tropical fish](aquarium-2003_1.gif)
+![Aquarium 2003 - pixel fish tank with glass refraction and named tropical fish](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/aquarium-2003/aquarium-2003_1.gif)
 
 > 你小时候盯过的那个屏保活了——缸里的鱼记得你。
 
@@ -38,7 +38,7 @@
 | 文件 | 说明 |
 | --- | --- |
 | `aquarium-2003.html` | 完整可运行的 H5 互动作品，约 56KB |
-| `aquarium-2003_1.gif` | 预览动图：像素鱼缸、鱼群聚拢与宝丽来拍照 |
+| [`aquarium-2003_1.gif`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/aquarium-2003/aquarium-2003_1.gif) | 预览动图：像素鱼缸、鱼群聚拢与宝丽来拍照 |
 | `aquarium-2003.md` | 本说明文件 |
 
 ## 🖱️ 交互

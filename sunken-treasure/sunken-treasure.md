@@ -19,7 +19,7 @@
   WORK_META_END
 -->
 
-![Crystal aqua world with 3D game console spawning vector fish](sunken-treasure_1.gif)
+![Crystal aqua world with 3D game console spawning vector fish](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/sunken-treasure/sunken-treasure_1.gif)
 
 > 像素鱼游进掌机传送门，逃逸到 3D 水晶水体中，蜕变为优雅的矢量鱼——鱼群随时间越来越多。
 
@@ -38,7 +38,7 @@
 | 文件 | 说明 |
 | --- | --- |
 | `sunken-treasure.html` | 完整可运行的 H5 互动作品，约 36KB |
-| `sunken-treasure_1.gif` | 预览动图：掌机生态系统完整演示 |
+| [`sunken-treasure_1.gif`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/sunken-treasure/sunken-treasure_1.gif) | 预览动图：掌机生态系统完整演示 |
 | `sunken-treasure.md` | 本说明文件 |
 
 ## 🖱️ 交互

@@ -19,7 +19,7 @@
   WORK_META_END
 -->
 
-![luminous-sea-bottle · 玻璃瓶里的夜光海](luminous-sea-bottle_1.gif)
+![luminous-sea-bottle · 玻璃瓶里的夜光海](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/luminous-sea-bottle/luminous-sea-bottle_1.gif)
 
 > 你碰它，它亮给你看。然后慢慢，慢慢暗回去。像深海里的一个秘密。
 
@@ -33,7 +33,7 @@
 
 ## ✨ 预览
 
-![luminous-sea-bottle · 玻璃瓶里的夜光海](luminous-sea-bottle_1.gif)
+![luminous-sea-bottle · 玻璃瓶里的夜光海](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/luminous-sea-bottle/luminous-sea-bottle_1.gif)
 
 ---
 
@@ -42,7 +42,7 @@
 | 文件 | 说明 |
 |------|------|
 | `luminous-sea-bottle.html` | 自包含交互 H5——内联 CSS + p5.js CDN |
-| `luminous-sea-bottle_1.gif` | 动态预览截图 |
+| [`luminous-sea-bottle_1.gif`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/luminous-sea-bottle/luminous-sea-bottle_1.gif) | 动态预览截图 |
 
 ---
 

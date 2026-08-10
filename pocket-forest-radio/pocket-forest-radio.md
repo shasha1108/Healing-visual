@@ -19,7 +19,7 @@
   WORK_META_END
 -->
 
-![Pocket Forest Radio - Frutiger Aero glass radio device with pixel forest screen and tuning ring](pocket-forest-radio_1.gif)
+![Pocket Forest Radio - Frutiger Aero glass radio device with pixel forest screen and tuning ring](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/pocket-forest-radio/pocket-forest-radio_1.gif)
 
 > 轻拨调谐环，把一片像素森林调到你的频率上。
 
@@ -38,7 +38,7 @@
 | 文件 | 说明 |
 | --- | --- |
 | `pocket-forest-radio.html` | 完整可运行的 H5 互动作品，约 24KB |
-| `pocket-forest-radio_1.gif` | 预览图：调谐环交互与像素森林动画 |
+| [`pocket-forest-radio_1.gif`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/pocket-forest-radio/pocket-forest-radio_1.gif) | 预览图：调谐环交互与像素森林动画 |
 | `pocket-forest-radio.md` | 本说明文件 |
 
 ## 🖱️ 交互

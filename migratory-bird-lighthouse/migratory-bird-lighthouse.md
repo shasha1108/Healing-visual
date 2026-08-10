@@ -19,7 +19,7 @@
   WORK_META_END
 -->
 
-![雾中候鸟灯塔 - volumetric cylindrical beam over dark sea with migratory birds](migratory_bird_lighthouse.gif)
+![雾中候鸟灯塔 - volumetric cylindrical beam over dark sea with migratory birds](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/migratory-bird-lighthouse/migratory-bird-lighthouse_1.gif)
 
 > 光落处，漂泊暂歇。
 
@@ -38,7 +38,7 @@
 | 文件 | 说明 |
 | --- | --- |
 | `migratory-bird-lighthouse.html` | 完整可运行的 H5 互动作品，约 28KB |
-| `migratory_bird_lighthouse.gif` | 预览动图：光束照耀海面、候鸟穿行升华 |
+| [`migratory-bird-lighthouse_1.gif`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/migratory-bird-lighthouse/migratory-bird-lighthouse_1.gif) | 预览动图：光束照耀海面、候鸟穿行升华 |
 | `migratory-bird-lighthouse.md` | 本说明文件 |
 
 ## 🖱️ 交互

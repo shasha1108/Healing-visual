@@ -19,7 +19,7 @@
   WORK_META_END
 -->
 
-![Transparent Dream Stratigraph - pixel art geological instrument with animated crown rotation and glowing strata layers](transparent-dream-stratigraph_1.gif)
+![Transparent Dream Stratigraph - pixel art geological instrument with animated crown rotation and glowing strata layers](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/transparent-dream-stratigraph/transparent-dream-stratigraph_1.gif)
 
 > 转动冠轮，地层仪将未说出口的梦压入一层发光的地质年轮。
 
@@ -38,7 +38,7 @@
 | 文件 | 说明 |
 | --- | --- |
 | `transparent-dream-stratigraph.html` | 完整可运行的 H5 互动作品，约 26KB |
-| `transparent-dream-stratigraph_1.gif` | 预览动画：冠轮旋转 + 地层推进 + 化石唤醒效果 |
+| [`transparent-dream-stratigraph_1.gif`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/transparent-dream-stratigraph/transparent-dream-stratigraph_1.gif) | 预览动画：冠轮旋转 + 地层推进 + 化石唤醒效果 |
 | `transparent-dream-stratigraph.md` | 本说明文件 |
 
 ## 🖱️ 交互

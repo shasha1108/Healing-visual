@@ -19,7 +19,7 @@
   WORK_META_END
 -->
 
-![预览](aero-slime_1.gif)
+![预览](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/aero-slime/aero-slime_1.gif)
 
 > 点击色块投喂情绪，双击玻璃释放惊吓——一只住在亚克力盒子里的电子史莱姆，用颜文字回应你的每一种心情。
 
@@ -38,7 +38,7 @@
 | 文件 | 说明 |
 | --- | --- |
 | `aero-slime.html` | 完整可运行的 H5 互动作品，约 20KB |
-| `aero-slime_1.gif` | 预览动图：情绪投喂与惊吓分裂交互演示 |
+| [`aero-slime_1.gif`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/aero-slime/aero-slime_1.gif) | 预览动图：情绪投喂与惊吓分裂交互演示 |
 | `aero-slime.md` | 本说明文件 |
 
 ## 🖱️ 交互

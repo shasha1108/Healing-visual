@@ -19,7 +19,7 @@
   WORK_META_END
 -->
 
-![Clockwork Tidal Gauge — Frutiger Aero glass capsule with moon phase gear and Bayer-dithered tide water](clockwork-tidal-gauge_1.gif)
+![Clockwork Tidal Gauge — Frutiger Aero glass capsule with moon phase gear and Bayer-dithered tide water](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/clockwork-tidal-gauge/clockwork-tidal-gauge_1.gif)
 
 > 触碰玻璃舱体，月相齿轮转动一格，潮汐随之涨落——一台封存在像素胶囊里的发条潮汐仪。
 
@@ -38,7 +38,7 @@
 | 文件 | 说明 |
 | --- | --- |
 | `clockwork-tidal-gauge.html` | 完整可运行的 H5 互动作品，约 20KB |
-| `clockwork-tidal-gauge_1.gif` | 预览图：触碰胶囊、齿轮旋转、潮汐涨落的动态演示 |
+| [`clockwork-tidal-gauge_1.gif`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/clockwork-tidal-gauge/clockwork-tidal-gauge_1.gif) | 预览图：触碰胶囊、齿轮旋转、潮汐涨落的动态演示 |
 | `clockwork-tidal-gauge.md` | 本说明文件 |
 
 ## 🖱️ 交互

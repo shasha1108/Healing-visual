@@ -19,7 +19,7 @@
   WORK_META_END
 -->
 
-![First Light - preview 1](first-light_1.gif)
+![First Light - preview 1](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/first-light/first-light_1.gif)
 
 > 一颗黑色像素种子，在你的温度里长出第一束光。
 
@@ -40,7 +40,7 @@ aero16 色板、Bayer 4×4 有序抖动、指数趋缓动画与 Web Audio 即兴
 | 文件 | 说明 |
 | --- | --- |
 | `first-light.html` | 完整可运行的 H5 互动作品，约 43KB |
-| `first-light_1.gif` | 预览图 1 |
+| [`first-light_1.gif`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/first-light/first-light_1.gif) | 预览图 1 |
 | `first-light.md` | 本说明文件 |
 
 ## 🖱️ 交互

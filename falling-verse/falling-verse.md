@@ -19,7 +19,7 @@
   WORK_META_END
 -->
 
-![预览](falling-verse_1.gif)
+![预览](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/falling-verse/falling-verse_1.gif)
 
 > 时间的字符拓扑——数字从行星环上剥落，化作金粉与星辰，沉入幽蓝水面。
 
@@ -38,7 +38,7 @@
 | 文件 | 说明 |
 | --- | --- |
 | `falling-verse.html` | 完整可运行的 H5 互动作品 |
-| `falling-verse_1.gif` | 预览动图：行星公转与时间数字剥落演示 |
+| [`falling-verse_1.gif`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/falling-verse/falling-verse_1.gif) | 预览动图：行星公转与时间数字剥落演示 |
 | `falling-verse.md` | 本说明文件 |
 
 ## 🖱️ 交互

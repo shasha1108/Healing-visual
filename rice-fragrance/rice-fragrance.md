@@ -23,7 +23,7 @@
 
 ## ✨ 预览
 
-![Rice Fragrance - pixel pastoral landscape with golden rice fields, river, scarecrow, windmills, and fireflies at dusk](rice-fragrance_1.gif)
+![Rice Fragrance - pixel pastoral landscape with golden rice fields, river, scarecrow, windmills, and fireflies at dusk](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/rice-fragrance/rice-fragrance_1.gif)
 
 ## 📂 文件说明
 

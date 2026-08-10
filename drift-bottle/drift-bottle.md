@@ -19,7 +19,7 @@
   WORK_META_END
 -->
 
-![预览](drift-bottle_1.gif)
+![预览](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/drift-bottle/drift-bottle_1.gif)
 
 > 轻触漂流瓶，唤醒瓶中平行世界——帆船、发光鲨鱼、微型海鸥在同一片玻璃海域中共生。
 
@@ -38,7 +38,7 @@
 | 文件 | 说明 |
 | --- | --- |
 | `drift-bottle.html` | 完整可运行的 H5 互动作品，约 22KB |
-| `drift-bottle_1.gif` | 预览动图：漂流瓶生态系统动态展示 |
+| [`drift-bottle_1.gif`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/drift-bottle/drift-bottle_1.gif) | 预览动图：漂流瓶生态系统动态展示 |
 | `drift-bottle.md` | 本说明文件 |
 
 ## 🖱️ 交互

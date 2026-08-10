@@ -19,7 +19,7 @@
   WORK_META_END
 -->
 
-![overwork - thought fragments dissolving into pixel motes inside a bezier glass echo box](overwork_1.gif)
+![overwork - thought fragments dissolving into pixel motes inside a bezier glass echo box](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/overwork/overwork_1.gif)
 
 > 把下班后仍在脑内重播的短语交出去，让语言松解成微光并自然沉底。
 
@@ -40,7 +40,7 @@
 | 文件 | 说明 |
 | --- | --- |
 | `overwork.html` | 完整可运行的 H5 互动作品，约 44KB |
-| `overwork_1.gif` | 预览图：短语碎片在玻璃回响盒内沉降为微光粒子 |
+| [`overwork_1.gif`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/overwork/overwork_1.gif) | 预览图：短语碎片在玻璃回响盒内沉降为微光粒子 |
 | `overwork.md` | 本说明文件 |
 
 ## 🖱️ 交互

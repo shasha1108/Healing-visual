@@ -20,7 +20,7 @@
 -->
 
 
-![Pixel Aquarium — 像素小鱼在 Frutiger Aero 毛玻璃水族箱中游动，点击投食，双击敲玻璃](pixel-aquarium_1.gif)
+![Pixel Aquarium — 像素小鱼在 Frutiger Aero 毛玻璃水族箱中游动，点击投食，双击敲玻璃](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/pixel-aquarium/pixel-aquarium_1.gif)
 
 > 像素小鱼在晶莹剔透的 Frutiger Aero 水族箱里游动。单击投食，双击敲玻璃——每一次触碰都是一次治愈。
 
@@ -37,7 +37,7 @@
 | 文件 | 说明 |
 | --- | --- |
 | `pixel-aquarium.html` | 完整可运行的 H5 互动水族箱，约 16KB |
-| `pixel-aquarium_1.gif` | 预览动图：交互演示 |
+| [`pixel-aquarium_1.gif`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/pixel-aquarium/pixel-aquarium_1.gif) | 预览动图：交互演示 |
 | `pixel-aquarium.md` | 本说明文件 |
 
 ## 🖱️ 交互

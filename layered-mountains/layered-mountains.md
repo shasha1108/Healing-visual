@@ -23,7 +23,7 @@
 > **一句话定义:** 这是一个基于 Three.js WebGL 构建的 250K+ 粒子中国山水画渲染实验，专门解决了海量粒子构成传统青绿山水意境的可视化问题。
 > **What it does:** A 250K+ particle Chinese landscape painting rendering experiment built with Three.js WebGL that visualizes traditional blue-green shanshui aesthetics through massive particle systems.
 
-![Layered Mountains - 250K particles Chinese painting touch-scatter interaction](layered-mountains.jpg)
+![Layered Mountains - 250K particles Chinese painting touch-scatter interaction](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/layered-mountains/layered-mountains.jpg)
 
 > 触之即散，聚散随缘。
 
@@ -40,7 +40,7 @@
 | 文件 | 说明 |
 | --- | --- |
 | `layered-mountains.html` | 完整可运行的 H5 互动作品，约 12KB |
-| `layered-mountains.jpg` | 预览图 |
+| [`layered-mountains.jpg`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/layered-mountains/layered-mountains.jpg) | 预览图 |
 | `layered-mountains.md` | 本说明文件，专属于 `layered-mountains.html` |
 
 - 页面语言：`zh`

@@ -23,7 +23,7 @@
 > **一句话定义:** 这是一个基于原生 Canvas 2D + Web Audio 构建的躯体化症状医学插图 H5，专门解决了情绪与身体症状之间关联的可视化科普问题。
 > **What it does:** A somatic symptom medical illustration H5 built with vanilla Canvas 2D and Web Audio that visualizes the connection between emotions and physical symptoms.
 
-![Silent Translator - frame-by-frame anatomical sketch with Web Audio healing engine](silent-translator_1.png)
+![Silent Translator - frame-by-frame anatomical sketch with Web Audio healing engine](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/silent-translator/silent-translator_1.png)
 
 > 那些你说不出口的崩溃，身体都只能用疼痛替你作答。
 
@@ -44,7 +44,7 @@
 | 文件 | 说明 |
 | --- | --- |
 | `silent-translator.html` | 完整可运行的 H5 互动作品，约 19KB |
-| `silent-translator_1.png` | 预览图：3D 悬浮便签 + 达芬奇风格解剖手稿 + 打字机诊断报告 |
+| [`silent-translator_1.png`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/silent-translator/silent-translator_1.png) | 预览图：3D 悬浮便签 + 达芬奇风格解剖手稿 + 打字机诊断报告 |
 | `silent-translator.md` | 本说明文件 |
 
 ## 🖱️ 交互

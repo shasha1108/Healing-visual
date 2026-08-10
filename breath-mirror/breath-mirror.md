@@ -23,7 +23,7 @@
 > **一句话定义:** 这是一个基于 Three.js WebGL + GLSL 片段着色器构建的 GPU 流体模拟实验，专门解决了呼吸节奏与视觉反馈实时同步的问题。
 > **What it does:** A GPU fluid simulation built with Three.js WebGL and GLSL fragment shaders that synchronizes breath rhythm with real-time visual feedback.
 
-![Breath Mirror - GPU fluid simulation with Brown noise and breath-responsive mirror shader](breath-mirror_1.png)
+![Breath Mirror - GPU fluid simulation with Brown noise and breath-responsive mirror shader](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/breath-mirror/breath-mirror_1.png)
 
 > 这里没有深渊，也没有波澜。只有漫长的白噪音，和迟钝的回响。
 
@@ -44,7 +44,7 @@
 | 文件 | 说明 |
 | --- | --- |
 | `breath-mirror.html` | 完整可运行的 H5 互动作品，约 19KB |
-| `breath-mirror_1.png` | 预览图：深海穹洞 + 幽灵 AR 倒影 + 厚重蓝雾 |
+| [`breath-mirror_1.png`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/breath-mirror/breath-mirror_1.png) | 预览图：深海穹洞 + 幽灵 AR 倒影 + 厚重蓝雾 |
 | `breath-mirror.md` | 本说明文件 |
 
 ## 🖱️ 交互

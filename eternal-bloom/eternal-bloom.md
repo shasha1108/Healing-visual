@@ -19,7 +19,7 @@
   WORK_META_END
 -->
 
-![Parametric 3D flowers sealed under glass cloches on a shelf — p5.js Canvas 2D eternal-bloom preview](eternal-bloom_1.gif)
+![Parametric 3D flowers sealed under glass cloches on a shelf — p5.js Canvas 2D eternal-bloom preview](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/eternal-bloom/eternal-bloom_1.gif)
 
 > 调好一朵花的每个参数，封进玻璃钟罩，它就替你一直开着。
 
@@ -40,7 +40,7 @@
 | 文件 | 说明 |
 | --- | --- |
 | `eternal-bloom.html` | 完整可运行的 H5 互动作品，约 57KB |
-| `eternal-bloom_1.gif` | 预览图 1 |
+| [`eternal-bloom_1.gif`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/eternal-bloom/eternal-bloom_1.gif) | 预览图 1 |
 | `eternal-bloom.md` | 本说明文件 |
 
 ## 🖱️ 交互

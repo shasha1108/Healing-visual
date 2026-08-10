@@ -23,7 +23,7 @@
 
 ## ✨ 预览
 
-![Windmill Valley - 15 rainbow windmills across 5 depth layers with golden hour lighting](windmill-valley_1.gif)
+![Windmill Valley - 15 rainbow windmills across 5 depth layers with golden hour lighting](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/windmill-valley/windmill-valley_1.gif)
 
 ## 📂 文件说明
 

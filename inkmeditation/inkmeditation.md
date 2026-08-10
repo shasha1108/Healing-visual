@@ -23,7 +23,7 @@
 > **一句话定义:** 这是一个基于 Three.js WebGL 构建的 100K+ 粒子水墨流体模拟，专门解决了高密度粒子系统在浏览器中的实时流体力学渲染问题。
 > **What it does:** A 100K+ particle ink-wash fluid simulation built with Three.js WebGL that solves real-time fluid dynamics rendering for high-density particle systems in the browser.
 
-![Inkmeditation - 100K fluid dynamics particles with breath-cycle sync meditative interaction](inkmeditation.jpg)
+![Inkmeditation - 100K fluid dynamics particles with breath-cycle sync meditative interaction](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/inkmeditation/inkmeditation.jpg)
 
 > 算法物理学 × 视觉设计 × 心理疗愈——指尖之上的数字交互艺术品。
 

@@ -19,7 +19,7 @@
   WORK_META_END
 -->
 
-![预览](oxygen-chamber_1.gif)
+![预览](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/oxygen-chamber/oxygen-chamber_1.gif)
 
 > 60秒情绪氧气舱——选一种天气，让内心在玻璃小屋里安静呼吸。
 
@@ -33,7 +33,7 @@
 
 ## ✨ 预览
 
-![oxygen-chamber · 内心气象日记 · 60s 氧气舱](oxygen-chamber_1.gif)
+![oxygen-chamber · 内心气象日记 · 60s 氧气舱](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/oxygen-chamber/oxygen-chamber_1.gif)
 
 ---
 
@@ -42,7 +42,7 @@
 | 文件 | 说明 |
 |------|------|
 | `oxygen-chamber.html` | 自包含交互 H5——内联 CSS + p5.js CDN + Web Audio 合成 |
-| `oxygen-chamber_1.gif` | 动态预览截图 |
+| [`oxygen-chamber_1.gif`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/oxygen-chamber/oxygen-chamber_1.gif) | 动态预览截图 |
 
 ---
 

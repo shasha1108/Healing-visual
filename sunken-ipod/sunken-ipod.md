@@ -19,7 +19,7 @@
   WORK_META_END
 -->
 
-![沉水 iPod 预览 - Frutiger Aero underwater crystal iPod with click wheel and bubbles](sunken-ipod_1.gif)
+![沉水 iPod 预览 - Frutiger Aero underwater crystal iPod with click wheel and bubbles](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/sunken-ipod/sunken-ipod_1.gif)
 
 > 深海之底，一首七里香。触碰水面，音符如气泡升起。
 
@@ -38,7 +38,7 @@
 | 文件 | 说明 |
 | --- | --- |
 | `sunken-ipod.html` | 完整可运行的 H5 互动作品，约 20KB |
-| `sunken-ipod_1.gif` | 预览动图：水下 iPod 全景交互演示 |
+| [`sunken-ipod_1.gif`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/sunken-ipod/sunken-ipod_1.gif) | 预览动图：水下 iPod 全景交互演示 |
 | `sunken-ipod.md` | 本说明文件 |
 
 ## 🖱️ 交互

@@ -19,7 +19,7 @@
   WORK_META_END
 -->
 
-![The Sealed Four O'Clock - preview 1](sealed-summer-jar_1.gif)
+![The Sealed Four O'Clock - preview 1](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/sealed-summer-jar/sealed-summer-jar_1.gif)
 
 > 一只玻璃罐，把一个不会结束的夏日下午四点钟封存了起来。
 
@@ -40,7 +40,7 @@
 | 文件 | 说明 |
 | --- | --- |
 | `sealed-summer-jar.html` | 完整可运行的 H5 互动作品，约 26KB |
-| `sealed-summer-jar_1.gif` | 预览图 1 |
+| [`sealed-summer-jar_1.gif`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/sealed-summer-jar/sealed-summer-jar_1.gif) | 预览图 1 |
 | `sealed-summer-jar.md` | 本说明文件 |
 
 ## 🖱️ 交互

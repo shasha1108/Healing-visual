@@ -23,7 +23,7 @@
 > **一句话定义:** 这是一个基于 Three.js WebGL 构建的水墨太极粒子物理模拟，专门解决了太极引力场驱动粒子形成水墨扩散与回旋效果的实时交互问题。
 > **What it does:** A sumi-e taichi particle physics simulation built with Three.js WebGL that drives particles to form ink-wash diffusion and rotation effects through a taichi gravity field algorithm.
 
-![Sumi-e Taichi - Canvas 2D particle physics ink ripple with taichi gravity field](sumi-e-taichi.jpg)
+![Sumi-e Taichi - Canvas 2D particle physics ink ripple with taichi gravity field](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/sumi-e-taichi/sumi-e-taichi.jpg)
 
 > 一滴墨落入宣纸的瞬间——既是破坏，也是开始。
 

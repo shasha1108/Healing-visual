@@ -19,7 +19,7 @@
   WORK_META_END
 -->
 
-![tree-remembers-wind preview](tree-remembers-wind_1.gif)
+![tree-remembers-wind preview](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/tree-remembers-wind/tree-remembers-wind_1.gif)
 
 > 释放与辽阔 —— 一座悬浮小岛上，像素树把每一次拂过树冠的手势变成一阵沿枝传播的风。
 
@@ -40,7 +40,7 @@
 | 文件 | 说明 |
 | --- | --- |
 | `tree-remembers-wind.html` | 完整可运行的 H5 互动作品，约 26KB |
-| `tree-remembers-wind_1.gif` | 预览动图：风传播 + 萤火虫弧线 + 叶片翻面 |
+| [`tree-remembers-wind_1.gif`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/tree-remembers-wind/tree-remembers-wind_1.gif) | 预览动图：风传播 + 萤火虫弧线 + 叶片翻面 |
 | `tree-remembers-wind.md` | 本说明文件 |
 
 ## 🖱️ 交互

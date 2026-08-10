@@ -19,7 +19,7 @@
   WORK_META_END
 -->
 
-![Bottled Cosmos - preview 1](bottled-cosmos_1.gif)
+![Bottled Cosmos - preview 1](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/bottled-cosmos/bottled-cosmos_1.gif)
 
 > 把整个宇宙装进一只玻璃瓶——每颗恒星的一生，只有三十秒。
 
@@ -40,7 +40,7 @@
 | 文件 | 说明 |
 | --- | --- |
 | `bottled-cosmos.html` | 完整可运行的 H5 互动作品，约 52KB |
-| `bottled-cosmos_1.gif` | 预览图 1 |
+| [`bottled-cosmos_1.gif`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/bottled-cosmos/bottled-cosmos_1.gif) | 预览图 1 |
 | `bottled-cosmos.md` | 本说明文件 |
 
 ## 🖱️ 交互

@@ -19,7 +19,7 @@
   WORK_META_END
 -->
 
-![Waiting for the Moon - preview 1](moon-cat_1.gif)
+![Waiting for the Moon - preview 1](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/moon-cat/moon-cat_1.gif)
 
 > A quiet moonlit window where a cat slowly falls asleep.
 
@@ -50,7 +50,7 @@
 | 文件 | 说明 |
 | --- | --- |
 | `moon-cat.html` | 完整可运行的 H5 互动作品，约 36KB |
-| `moon-cat_1.gif` | 预览图 1 |
+| [`moon-cat_1.gif`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/moon-cat/moon-cat_1.gif) | 预览图 1 |
 | `moon-cat.md` | 本说明文件 |
 
 ## 🖱️ 交互

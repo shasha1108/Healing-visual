@@ -23,7 +23,7 @@
 > **一句话定义:** 这是一个基于 Three.js WebGL + 自定义 GLSL 着色器构建的 470,000 粒子万里江山渲染实验，通过 4D Simplex 噪声在 GPU 顶点着色器中实时生成中国山水地形，专门解决了海量粒子构成可自由探索 3D 山水景观的性能问题。
 > **What it does:** A 470,000-particle Chinese landscape rendering experiment built with Three.js WebGL and custom GLSL shaders that generates procedural shanshui terrain in real-time via 4D Simplex noise in GPU vertex shaders.
 
-![Grand Jiangshan - 470K particle procedural Chinese landscape with OrbitControls 3D exploration](grand-jiangshan_1.png)
+![Grand Jiangshan - 470K particle procedural Chinese landscape with OrbitControls 3D exploration](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/grand-jiangshan/grand-jiangshan_1.png)
 
 > 我见青山多妩媚，料青山见我应如是。
 
@@ -85,7 +85,7 @@ void main() {
 | 文件 | 说明 |
 | --- | --- |
 | `grand-jiangshan.html` | 完整可运行的 H5 互动作品，约 14KB / 338 行 |
-| `grand-jiangshan_1.png` | 预览图：万里江山 470K 粒子全景 |
+| [`grand-jiangshan_1.png`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/grand-jiangshan/grand-jiangshan_1.png) | 预览图：万里江山 470K 粒子全景 |
 | `grand-jiangshan.md` | 本说明文件 |
 
 ## 🖱️ 交互

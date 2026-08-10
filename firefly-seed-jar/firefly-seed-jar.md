@@ -19,7 +19,7 @@
   WORK_META_END
 -->
 
-![Firefly Seed Jar — glass bottle with amber crystal seeds glowing on shelves](firefly-seed-jar_1.gif)
+![Firefly Seed Jar — glass bottle with amber crystal seeds glowing on shelves](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/firefly-seed-jar/firefly-seed-jar_1.gif)
 
 > 你碰到哪颗琥珀晶种，它就短暂相信春天来了，探出一根被拴住的萤光触角。
 
@@ -38,7 +38,7 @@
 | 文件 | 说明 |
 | --- | --- |
 | `firefly-seed-jar.html` | 完整可运行的 H5 互动作品，约 22KB |
-| `firefly-seed-jar_1.gif` | 预览图：按压唤醒种子、触角生长的动态演示 |
+| [`firefly-seed-jar_1.gif`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/firefly-seed-jar/firefly-seed-jar_1.gif) | 预览图：按压唤醒种子、触角生长的动态演示 |
 | `firefly-seed-jar.md` | 本说明文件 |
 
 ## 🖱️ 交互

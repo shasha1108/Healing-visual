@@ -23,14 +23,14 @@
 
 ## ✨ 预览
 
-![dreamcore-summer-rain - Summer night rain scene with vending machine glow and railway signal](dreamcore-summer-rain_1.gif)
+![dreamcore-summer-rain - Summer night rain scene with vending machine glow and railway signal](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/dreamcore-summer-rain/dreamcore-summer-rain_1.gif)
 
 ## 📂 文件说明
 
 | 文件 | 描述 |
 |------|------|
 | `dreamcore-summer-rain.html` | 主页面 |
-| `dreamcore-summer-rain_1.gif` | 预览动图 |
+| [`dreamcore-summer-rain_1.gif`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/dreamcore-summer-rain/dreamcore-summer-rain_1.gif) | 预览动图 |
 
 ## 🖱️ 交互
 

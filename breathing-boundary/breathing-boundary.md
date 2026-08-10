@@ -23,7 +23,7 @@
 > **一句话定义:** 这是一个基于 Three.js WebGL + 自定义 GLSL 着色器构建的有机膜粒子系统，专门解决了呼吸节律与半透膜视觉边界动态映射的问题。
 > **What it does:** An organic membrane particle system built with Three.js WebGL and custom GLSL shaders that dynamically maps breathing rhythm to a semi-permeable visual boundary.
 
-![Breathing Boundary - Three.js WebGL organic semi-permeable membrane with particle collision ripple effects](breathing-boundary_1.png)
+![Breathing Boundary - Three.js WebGL organic semi-permeable membrane with particle collision ripple effects](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/breathing-boundary/breathing-boundary_1.png)
 
 > 看似隔绝，实则翻译——这是一层活着的、会呼吸的边界。
 
@@ -40,7 +40,7 @@
 | 文件 | 说明 |
 | --- | --- |
 | `breathing-boundary.html` | 完整可运行的 H5 互动作品，约 35KB |
-| `breathing-boundary_1.png` | 预览图：半透膜 + 粒子碰撞涟漪效果 |
+| [`breathing-boundary_1.png`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/breathing-boundary/breathing-boundary_1.png) | 预览图：半透膜 + 粒子碰撞涟漪效果 |
 | `breathing-boundary.md` | 本说明文件 |
 
 ## 🖱️ 交互

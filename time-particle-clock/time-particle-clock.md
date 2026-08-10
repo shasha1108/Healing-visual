@@ -23,7 +23,7 @@
 > **一句话定义:** 这是一个基于 Three.js WebGL + 自定义 ShaderMaterial 构建的 200,000 粒子模拟时钟实验，通过时针/分针/秒针三套粒子系统将抽象时间可视化，专门解决了拖拽交互驱动时钟加速/减速时粒子流体消散感与指针结构保持之间的平衡问题。
 > **What it does:** A 200,000-particle analog clock experiment built with Three.js WebGL and custom ShaderMaterial that visualizes abstract time through three particle systems (hour/minute/second hands), balancing fluid particle dissipation with clock-hand structural integrity during drag-accelerated time manipulation.
 
-![Time Particle Clock - 200K particle analog clock with mouse-drag time manipulation and Web Audio ticks](time-particle-clock_1.png)
+![Time Particle Clock - 200K particle analog clock with mouse-drag time manipulation and Web Audio ticks](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/time-particle-clock/time-particle-clock_1.png)
 
 > 时间是流动的粒子——拖拽加速，松开即止，每一秒都有声音。
 
@@ -92,7 +92,7 @@ update(time, mouse, timeState) {
 | 文件 | 说明 |
 | --- | --- |
 | `time-particle-clock.html` | 完整可运行的 H5 互动作品，约 17KB / 411 行 |
-| `time-particle-clock_1.png` | 预览图：200K 粒子时钟 + 三针光晕 |
+| [`time-particle-clock_1.png`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/time-particle-clock/time-particle-clock_1.png) | 预览图：200K 粒子时钟 + 三针光晕 |
 | `time-particle-clock.md` | 本说明文件 |
 
 ## 🖱️ 交互

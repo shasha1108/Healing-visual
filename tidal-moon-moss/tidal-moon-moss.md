@@ -19,7 +19,7 @@
   WORK_META_END
 -->
 
-![Tidal Moon Moss — Frutiger Aero bell jar terrarium with glowing moon moss and spore particles](tidal-moon-moss_1.gif)
+![Tidal Moon Moss — Frutiger Aero bell jar terrarium with glowing moon moss and spore particles](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/tidal-moon-moss/tidal-moon-moss_1.gif)
 
 > 你碰了一下玻璃，罩里的月苔轻轻醒来，像一小片夜晚被照料。
 
@@ -38,7 +38,7 @@
 | 文件 | 说明 |
 | --- | --- |
 | `tidal-moon-moss.html` | 完整可运行的 H5 互动作品，约 22KB |
-| `tidal-moon-moss_1.gif` | 预览图：玻璃钟罩月苔互动动画 |
+| [`tidal-moon-moss_1.gif`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/tidal-moon-moss/tidal-moon-moss_1.gif) | 预览图：玻璃钟罩月苔互动动画 |
 | `tidal-moon-moss.md` | 本说明文件 |
 
 ## 🖱️ 交互

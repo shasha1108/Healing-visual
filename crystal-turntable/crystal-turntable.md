@@ -19,7 +19,7 @@
   WORK_META_END
 -->
 
-![Snowy night vinyl turntable with crystal glow and falling snow](crystal-turntable_1.gif)
+![Snowy night vinyl turntable with crystal glow and falling snow](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/crystal-turntable/crystal-turntable_1.gif)
 
 > 屋外雪花纷飞，这里的旋律永远为你温暖。
 
@@ -38,7 +38,7 @@
 | 文件 | 说明 |
 | --- | --- |
 | `crystal-turntable.html` | 完整可运行的 H5 互动作品，约 23KB |
-| `crystal-turntable_1.gif` | 预览动图：雪夜唱片机完整交互演示 |
+| [`crystal-turntable_1.gif`](https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/crystal-turntable/crystal-turntable_1.gif) | 预览动图：雪夜唱片机完整交互演示 |
 | `crystal-turntable.md` | 本说明文件 |
 
 ## 🖱️ 交互
