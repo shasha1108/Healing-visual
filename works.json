@@ -2,8 +2,8 @@
   "repo": "shasha1108/healing-visual-lab",
   "url": "https://github.com/shasha1108/healing-visual-lab",
   "pages": "https://shasha1108.github.io/healing-visual-lab/",
-  "total": 38,
-  "updated": "2026-08-07",
+  "total": 39,
+  "updated": "2026-08-10",
   "description": "Interactive healing H5 experiments — Three.js WebGL, Canvas 2D, GLSL shaders, Web Audio, GSAP, creative coding for emotional design. Most works load Three.js r128 via CDN; silent-translator is the only zero-dependency work.",
   "tech_landscape": {
     "threejs": [
@@ -21,6 +21,7 @@
       "layered-mountains"
     ],
     "canvas_2d": [
+      "paper-boat-release",
       "eternal-bloom",
       "sealed-summer-jar",
       "moon-cat",
@@ -65,6 +66,7 @@
       "layered-mountains"
     ],
     "web_audio": [
+      "paper-boat-release",
       "eternal-bloom",
       "sealed-summer-jar",
       "moon-cat",
@@ -130,6 +132,7 @@
       "inkmeditation"
     ],
     "touch_interaction": [
+      "paper-boat-release",
       "eternal-bloom",
       "bottled-cosmos",
       "sealed-summer-jar",
@@ -166,6 +169,7 @@
       "silent-translator"
     ],
     "p5js": [
+      "paper-boat-release",
       "eternal-bloom",
       "bottled-cosmos",
       "sealed-summer-jar",
@@ -1365,6 +1369,43 @@
         "layered-mountains.jpg"
       ],
       "date": "2026-06-11"
+    },
+    {
+      "slug": "paper-boat-release",
+      "title_en": "Paper Boat Release",
+      "title_zh": "纸船放行",
+      "tagline": "点开瓶塞，让一只纸船替你把难以言说的心事带向海面。",
+      "tech": [
+        "p5.js",
+        "Canvas 2D",
+        "Web Audio API"
+      ],
+      "render": "Canvas2D (p5.js)",
+      "has_audio": true,
+      "has_touch": true,
+      "particle_count": "N/A",
+      "dependencies": 1,
+      "healing_domain": "emotional_release",
+      "keywords": [
+        "p5.js",
+        "canvas 2d",
+        "web audio api",
+        "touch interaction"
+      ],
+      "use_cases": [
+        "p5.js",
+        "canvas 2d",
+        "web audio api",
+        "touch interaction"
+      ],
+      "files": [
+        "paper-boat-release.html",
+        "paper-boat-release.md"
+      ],
+      "preview_assets": [
+        "https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/paper-boat-release/v-2ebea3e84f4d/paper-boat-release_1.gif"
+      ],
+      "date": "2026-08-10"
     }
   ]
 }
