@@ -207,6 +207,43 @@
   },
   "works": [
     {
+      "slug": "glow-boat-bottle",
+      "title_en": "Glow Boat Bottle",
+      "title_zh": "夜航瓶",
+      "tagline": "玻璃瓶封着一小片夜海，发光的小船载着少年——拧开瓶塞，让它漂向真正的海。",
+      "tech": [
+        "p5.js",
+        "Canvas 2D",
+        "Web Audio API"
+      ],
+      "render": "Canvas2D (p5.js)",
+      "has_audio": true,
+      "has_touch": true,
+      "particle_count": "N/A",
+      "dependencies": 1,
+      "healing_domain": "meditation",
+      "keywords": [
+        "p5.js",
+        "canvas 2d",
+        "web audio api",
+        "touch interaction"
+      ],
+      "use_cases": [
+        "p5.js",
+        "canvas 2d",
+        "web audio api",
+        "touch interaction"
+      ],
+      "files": [
+        "glow-boat-bottle.html",
+        "glow-boat-bottle.md"
+      ],
+      "preview_assets": [
+        "https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/glow-boat-bottle/v-1781aba67f02/glow-boat-bottle_1.gif"
+      ],
+      "date": "2026-08-18"
+    },
+    {
       "slug": "magpie-bridge-heist",
       "title_en": "Magpie Bridge Heist",
       "title_zh": "鹊桥搞事现场",
@@ -1460,43 +1497,6 @@
         "layered-mountains.jpg"
       ],
       "date": "2026-06-11"
-    },
-    {
-      "slug": "glow-boat-bottle",
-      "title_en": "Glow Boat Bottle",
-      "title_zh": "夜航瓶",
-      "tagline": "玻璃瓶封着一小片夜海，发光的小船载着少年——拧开瓶塞，让它漂向真正的海。",
-      "tech": [
-        "p5.js",
-        "Canvas 2D",
-        "Web Audio API"
-      ],
-      "render": "Canvas2D (p5.js)",
-      "has_audio": true,
-      "has_touch": true,
-      "particle_count": "N/A",
-      "dependencies": 1,
-      "healing_domain": "meditation",
-      "keywords": [
-        "p5.js",
-        "canvas 2d",
-        "web audio api",
-        "touch interaction"
-      ],
-      "use_cases": [
-        "p5.js",
-        "canvas 2d",
-        "web audio api",
-        "touch interaction"
-      ],
-      "files": [
-        "glow-boat-bottle.html",
-        "glow-boat-bottle.md"
-      ],
-      "preview_assets": [
-        "https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/glow-boat-bottle/v-1781aba67f02/glow-boat-bottle_1.gif"
-      ],
-      "date": "2026-08-18"
     }
   ]
 }
