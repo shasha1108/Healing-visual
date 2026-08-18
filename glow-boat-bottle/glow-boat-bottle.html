@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<!--
+  Title: Glow Boat Bottle · 夜航瓶
+  Concept: 玻璃瓶里封着一小片夜海，发光的白色小船载着少年；点开瓶塞放行，小船漂出瓶口，化作背景夜海上的一盏灯
+  Summary: 药剂瓶 + 瓶内夜海 + 发光小船与少年剪影；触水起涟漪、船随涌起伏；开塞放行小船定居背景
+  Tech: p5.js, Canvas 2D, Web Audio API
+  Keywords: p5.js, canvas 2d, web audio api, touch interaction
+  Features: p5.js bottle stage with a lit boat on an inner night sea; touch ripples on the water and an open-cork release ritual, Web Audio synthesized chimes, deterministic seeded layout
+  Render: Canvas2D (p5.js)
+  Audio: yes
+  Touch: yes
+  Particles: N/A
+  Standalone: yes, single HTML file, 1 CDN dependencies
+  Repo: https://github.com/shasha1108/healing-visual-lab
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>夜航瓶 · Glow Boat Bottle</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+<script>window.p5||document.write('<script src="https://cdn.bootcdn.net/ajax/libs/p5.js/1.9.0/p5.min.js"><\/script>');</script>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100vw;height:100vh;overflow:hidden;background:#03070f;font-family:"Segoe UI","PingFang SC",sans-serif;user-select:none;-webkit-user-select:none;touch-action:none}
+#pixel-stage{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);overflow:hidden;border-radius:24px}
+#pixel-stage canvas{display:block;position:absolute;top:0;left:0;width:100%!important;height:100%!important;pointer-events:none;z-index:3}
+#interact-layer{position:absolute;inset:0;z-index:10;cursor:default}
+</style></head>
+<body><div id="pixel-stage"><div id="interact-layer"></div></div>
+<script>
+'use strict';
+// ═══════════════════ 常量与色板 ═══════════════════
+const PALETTE = {
+  name: 'Deep Night Sea (custom, Aero Aqua deep end)',
+  role: '玻璃容器/瓶中夜海/发光小船',
+  colors: ['#eaf9ff', '#9fdcff', '#70d8f0', '#0d3f52', '#0a1c2c', '#051824', '#040a16']
+};
+const BASE_W = 750, BASE_H = 1334;
+const GEOM = { k: Math.min(BASE_H * 0.62, 570) / 400, cx: BASE_W / 2, cy: BASE_H * 0.577 };
+const K = GEOM.K = GEOM.k;
+const WL_Y = 20 * K;                 // 水面线（瓶内局部 y）
+const HORIZON_Y = 960;               // 背景夜海地平线（舞台坐标）
+const MOUTH_Y = -156 * K;            // 瓶口（局部）
+const PENTA = [523.25, 587.33, 698.46, 783.99, 880.00];
+
+// ═══════════════════ 确定性随机 ═══════════════════
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const PARAMS = new URLSearchParams(typeof location !== 'undefined' ? location.search : '');
+const SEED = parseInt(PARAMS.get('seed') || '7', 10);
+const FAST = Math.max(0.1, parseFloat(PARAMS.get('fast') || '1'));
+
+// ═══════════════════ 瓶形几何（glass-bottle-kit 权威实现） ═══════════════════
+function innerR(y) {
+  const k = K, u = y / k;
+  let R;
+  if (u < -105) R = 30;
+  else if (u < 10) { const t = (u + 105) / 115, s = t * t * (3 - 2 * t); R = 30 + 78 * s; }
+  else if (u <= 135) R = 108;
+  else { const t = Math.min(1, (u - 135) / 53); R = 108 * Math.sqrt(Math.max(0, 1 - t * t)); }
+  return Math.max(0, (R - 7) * k);
+}
+function defineBottlePath(ctx, inset) {
+  const k = K, i = (inset || 0) * k;
+  ctx.beginPath();
+  ctx.moveTo(-30 * k + i, -156 * k);
+  ctx.lineTo(-30 * k + i, -105 * k);
+  ctx.bezierCurveTo(-30 * k + i, -60 * k, -108 * k - i, -35 * k, -108 * k - i, 30 * k);
+  ctx.lineTo(-108 * k - i, 135 * k);
+  ctx.quadraticCurveTo(-108 * k - i, 178 * k - i * 0.5, -58 * k, 178 * k - i);
+  ctx.quadraticCurveTo(0, 188 * k - i, 58 * k, 178 * k - i);
+  ctx.quadraticCurveTo(108 * k + i, 178 * k - i * 0.5, 108 * k + i, 135 * k);
+  ctx.lineTo(108 * k + i, 30 * k);
+  ctx.bezierCurveTo(108 * k + i, -35 * k, 30 * k - i, -60 * k, 30 * k - i, -105 * k);
+  ctx.lineTo(30 * k - i, -156 * k);
+  ctx.closePath();
+}
+
+// ═══════════════════ 世界状态 ═══════════════════
+let world = null;
+
+function initWorld(seed) {
+  const rng = mulberry32(seed);
+  const w = {
+    t: 0, reveal: 0,
+    fast: FAST,
+    waterEnergy: 0,          // 单信源：触摸/涟漪注入，驱动倒影扰动与表面光
+    touchGlow: 0,            // 容器级反馈：瓶口光环
+    corkOpen: false, corkAnim: 0,
+    released: false, settleCount: 0,
+    reformTimer: -1, reformT: 0,
+    ambientRippleTimer: 6 + rng() * 10,
+    stars: [], shimmer: [], motes: [], ripples: [], lights: [],
+    meteors: [], nextMeteor: 4 + rng() * 5,
+    boat: null
+  };
+  // 繁星满天：320 颗主星（约 12% 英雄星带十字芒）+ 110 颗银河带微星——质感来自层次，不是单点亮度
+  for (let i = 0; i < 320; i++) {
+    const hero = rng() < 0.12;
+    w.stars.push({
+      x: rng() * BASE_W, y: rng() * (HORIZON_Y - 60),
+      r: hero ? 1.8 + rng() * 1.3 : 0.6 + rng() * 1.4,
+      ph: rng() * 6.28, sp: 0.4 + rng() * 1.1,
+      cyan: rng() < 0.3, hero
+    });
+  }
+  // 银河带微星（沿 (60,90)→(690,420) 对角带聚集）
+  for (let i = 0; i < 110; i++) {
+    const t = rng();
+    w.stars.push({
+      x: 60 + t * (BASE_W - 120) + (rng() * 2 - 1) * 46,
+      y: 90 + t * 330 + (rng() * 2 - 1) * 55,
+      r: 0.5 + rng() * 0.8, ph: rng() * 6.28, sp: 0.3 + rng() * 0.8,
+      cyan: rng() < 0.4, hero: false
+    });
+  }
+  // 水面星辰：最亮的英雄星在海面拖出竖向碎光痕（与天上同一颗同步闪烁——"遗落的孤独"）
+  w.starReflections = w.stars.filter(s => s.hero).slice(0, 16).map(s => ({
+    x: s.x, ph: s.ph, sp: s.sp, cyan: s.cyan,
+    depth: 12 + rng() * 55, segs: 3 + Math.floor(rng() * 3)
+  }));
+  for (let i = 0; i < 14; i++) {
+    w.shimmer.push({ x0: rng() * BASE_W, y: HORIZON_Y + 8 + rng() * 60, len: 14 + rng() * 40, spd: 3 + rng() * 9, ph: rng() * 6.28, a: 0.05 + rng() * 0.08 });
+  }
+  for (let i = 0; i < 12; i++) {
+    w.motes.push({
+      x: (rng() * 2 - 1) * 70 * K, y: WL_Y + 30 * K + rng() * 100 * K,
+      vx: (rng() * 2 - 1) * 7, vy: (rng() * 2 - 1) * 5,
+      r: 1.6 + rng() * 2.2, ph: rng() * 6.28
+    });
+  }
+  w.boat = {
+    x: 24 * K, y: WL_Y, driftV: 5,
+    bobY: 0, bobV: 0, rock: 0, rockV: 0,
+    glow: 0,                    // reveal 时凝光淡入
+    mode: 'IDLE',               // IDLE | CENTERING | RISING | EXITING | SETTLED | GONE | REFORM
+    exitT: 0, sx: 0, sy: 0, svx: 0, svy: 0,
+    hullAlpha: 1, shrink: 1, orb: 0
+  };
+  // 放归定居槽位（全部在瓶身剪影之外的海面：每个点都满足 |x-cx| > 瓶身该高度半宽+光晕余量，永不遮挡）
+  w.slots = [
+    { x: 104, y: 948 }, { x: 646, y: 966 }, { x: 90, y: 1000 },
+    { x: 664, y: 1004 }, { x: 120, y: 1032 }, { x: 636, y: 940 }
+  ];
+  return w;
+}
+
+// ═══════════════════ 音频（用户手势后启用） ═══════════════════
+let AC = null, masterGain = null;
+function ensureAudio() {
+  if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
+  try {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = AC.createGain();
+    masterGain.gain.value = 0;
+    masterGain.connect(AC.destination);
+    masterGain.gain.linearRampToValueAtTime(0.5, AC.currentTime + 0.8);
+  } catch (e) { AC = null; }
+}
+function ping(freq, vol, dur, delay) {
+  if (!AC || !masterGain) return;
+  const t0 = AC.currentTime + (delay || 0);
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = 'sine'; o.frequency.value = freq;
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(vol, t0 + 0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g); g.connect(masterGain);
+  o.start(t0); o.stop(t0 + dur + 0.05);
+  o.onended = () => { try { o.disconnect(); g.disconnect(); } catch (e) {} };
+}
+
+// ═══════════════════ 更新（QA 可独立推进时间） ═══════════════════
+function updateWorld(dt, rawDt) {
+  const w = world, b = w.boat;
+  const dt60 = dt * 60;
+  w.t += dt;
+
+  // 慢揭示
+  const revealSpeed = 1 / 3.6;
+  w.reveal = Math.min(1, w.reveal + rawDt * revealSpeed * (w.fast > 1 ? w.fast : 1));
+
+  // 单信源衰减
+  w.waterEnergy *= Math.pow(0.94, dt60);
+  if (w.waterEnergy < 0.01) w.waterEnergy = 0;
+  w.touchGlow *= Math.pow(0.92, dt60);
+
+  // 软木塞缓动
+  w.corkAnim += ((w.corkOpen ? 1 : 0) - w.corkAnim) * Math.min(1, rawDt * 3.5);
+
+  // 环境微涟漪（静置生命：偶尔一圈小波纹）
+  w.ambientRippleTimer -= dt * w.fast;
+  if (w.ambientRippleTimer <= 0) {
+    w.ambientRippleTimer = 9 + mulberry32((w.t * 1000) | 0)() * 13;    spawnRipple((Math.sin(w.t * 0.73) * 0.7) * 60 * K, 0.35);
+  }
+
+  // 流星：每 5–11 秒一颗划过夜空（时间种子确定性，与放归的"落入海"互为呼应——天上的也在落）
+  w.nextMeteor -= dt * w.fast;
+  if (w.nextMeteor <= 0) {
+    w.nextMeteor = 5 + mulberry32((w.t * 997) | 0)() * 6;
+    const mr = mulberry32((w.t * 1313) | 0);
+    const dir = mr() < 0.5 ? 1 : -1;
+    const spd = 640 + mr() * 320;
+    const ang = 0.42 + mr() * 0.3;
+    w.meteors.push({
+      x: dir > 0 ? 60 + mr() * 320 : BASE_W - 60 - mr() * 320,
+      y: 50 + mr() * 220,
+      vx: Math.cos(ang) * spd * dir, vy: Math.sin(ang) * spd,
+      life: 1, decay: 1 / (0.8 + mr() * 0.5)
+    });
+  }
+  for (let i = w.meteors.length - 1; i >= 0; i--) {
+    const m = w.meteors[i];
+    m.x += m.vx * dt; m.y += m.vy * dt;
+    m.life -= m.decay * dt;
+    if (m.life <= 0) w.meteors.splice(i, 1);
+  }
+
+  // 涟漪生命周期
+  for (let i = w.ripples.length - 1; i >= 0; i--) {
+    const r = w.ripples[i];
+    r.age += dt;
+    r.r = 10 + r.age * 150;
+    if (r.age > 1.4) { w.ripples.splice(i, 1); continue; }
+    // 波前到船：冲量注入（局部扰动，不是全局变亮）
+    if (!r.hit && (b.mode === 'IDLE' || b.mode === 'REFORM')) {
+      if (Math.abs(r.r - Math.abs(b.x - r.x)) < 14) {
+        r.hit = true;
+        b.bobV += 46 * r.e;
+        b.rockV += (b.x > r.x ? 1 : -1) * 1.1 * r.e;
+        w.waterEnergy = Math.min(1.6, w.waterEnergy + 0.3 * r.e);
+      }
+    }
+  }
+
+  // 船体弹簧物理（质量感：点按不是弹出东西）
+  b.bobV += (-b.bobY * 30 - b.bobV * 4.5) * dt;
+  b.bobY += b.bobV * dt;
+  b.rockV += (-b.rock * 20 - b.rockV * 4) * dt;
+  b.rock += b.rockV * dt;
+
+  // 船状态机
+  if (b.mode === 'IDLE') {
+    b.x += b.driftV * dt;
+    const lim = innerR(WL_Y) - 62 * K;
+    if (b.x > lim) { b.x = lim; b.driftV = -Math.abs(b.driftV); }
+    if (b.x < -lim) { b.x = -lim; b.driftV = Math.abs(b.driftV); }
+    b.glow = Math.min(1, b.glow + dt * 0.5);
+    b.hullAlpha = Math.min(1, b.hullAlpha + dt);
+    if (w.corkAnim > 0.9) b.mode = 'CENTERING';
+  } else if (b.mode === 'CENTERING') {
+    w.corkOpen = true; // 仪式期间保持开塞
+    b.x += (0 - b.x) * Math.min(1, dt * 2.2);
+    if (Math.abs(b.x) < 4) { b.x = 0; b.mode = 'RISING'; }
+  } else if (b.mode === 'RISING') {
+    w.corkOpen = true;
+    b.y -= 100 * dt * w.fast;
+    b.x *= Math.pow(0.9, dt60);          // 颈部径向收束
+    b.glow = Math.min(1.6, b.glow + dt * 0.8);
+    // 幻化解耦：瓶颈容不下船体——上升途中船形渐隐成光球，过肩前完成
+    const p = Math.max(0, Math.min(1, (WL_Y - b.y) / (WL_Y - MOUTH_Y)));
+    b.shrink = 1 - 0.35 * smooth01(p * 1.2);
+    // 颈部收束实体化：船体缩放被 innerR 钳制（船身与少年头顶各自约束取小），可见地被瓶口"收细"
+    const sHull = (innerR(b.y) - 6 * K) / (49 * K);
+    const sTop = (innerR(b.y - 12 * K) - 6 * K) / (49 * K);
+    const sHead = (innerR(b.y - 36 * K) - 6 * K) / (29.5 * K);
+    b.shrink = Math.min(b.shrink, Math.max(0.22, Math.min(sHull, sTop, sHead)));
+    b.hullAlpha = 1 - smooth01((p - 0.2) / 0.45);
+    b.orb = smooth01((p - 0.3) / 0.4);
+    if (b.y <= MOUTH_Y + 8 * K) {
+      // 过线：局部 → 舞台坐标（直立，无旋转换算）
+      b.mode = 'EXITING'; b.exitT = 0;
+      b.sx = GEOM.cx + b.x; b.sy = GEOM.cy + b.y;
+      b.svx = 0; b.svy = -130;
+    }
+  } else if (b.mode === 'EXITING') {
+    b.exitT += rawDt;
+    const slot = w.slots[w.settleCount % w.slots.length];
+    // 减速引导向定居槽位
+    b.svx += ((slot.x - b.sx) * 0.9 - b.svx * 1.4) * dt;
+    b.svy += ((slot.y - b.sy) * 0.9 - b.svy * 1.4) * dt;
+    b.sx += b.svx * dt; b.sy += b.svy * dt;
+    // 出瓶后保持光球形态——幻化是单向的：光球飞过夜空，落成海上的灯，船形不在瓶外闪回
+    b.orb = 1;
+    if (Math.hypot(slot.x - b.sx, slot.y - b.sy) < 9) {
+      w.lights.push({ x: slot.x, y: slot.y, ph: (w.settleCount * 2.4) % 6.28 });
+      w.settleCount++;
+      w.released = true;
+      b.mode = 'SETTLED';
+      w.corkOpen = false;
+      ping(523.25, 0.12, 1.2); ping(784, 0.09, 1.4, 0.12);
+    }
+  } else if (b.mode === 'SETTLED') {
+    b.mode = 'GONE';
+    w.reformTimer = 5 / w.fast;
+  } else if (b.mode === 'GONE') {
+    w.reformTimer -= dt;
+    if (w.reformTimer <= 0) { b.mode = 'REFORM'; w.reformT = 0; b.x = 0; b.y = WL_Y; b.glow = 0; b.hullAlpha = 0; b.shrink = 1; b.orb = 0; }
+  } else if (b.mode === 'REFORM') {
+    w.reformT += dt / 3;
+    b.glow = Math.min(1, w.reformT * 1.4);
+    b.hullAlpha = Math.min(1, Math.max(0, (w.reformT - 0.35) * 2));
+    if (w.reformT >= 1) { b.mode = 'IDLE'; b.driftV = (Math.sin(w.t) > 0 ? 5 : -5); }
+  }
+
+  // 微光浮游（边界：innerR 反弹 + 水面/瓶底钳制；REFORM 前半段向中心汇聚）
+  for (const m of w.motes) {
+    if (b.mode === 'REFORM' && w.reformT < 0.5) {
+      m.x += (0 - m.x) * Math.min(1, dt * 1.6);
+      m.y += (WL_Y + 34 * K - m.y) * Math.min(1, dt * 1.6);
+    } else {
+      m.x += m.vx * dt + Math.sin(w.t * 0.9 + m.ph) * 0.12;
+      m.y += m.vy * dt;
+      const rr = innerR(m.y) - 8;
+      if (Math.abs(m.x) > rr) { m.x = Math.sign(m.x) * rr; m.vx = -m.vx; }
+      if (m.y < WL_Y + 16) { m.y = WL_Y + 16; m.vy = Math.abs(m.vy); }
+      if (m.y > 150 * K) { m.y = 150 * K; m.vy = -Math.abs(m.vy); }
+    }
+  }
+}
+
+function spawnRipple(lx, energy) {
+  const w = world;
+  const lim = innerR(WL_Y) - 20 * K;
+  const x = Math.max(-lim, Math.min(lim, lx));
+  w.ripples.push({ x, age: 0, r: 10, e: energy, hit: false });
+  if (w.ripples.length > 9) w.ripples.shift();
+  w.waterEnergy = Math.min(1.6, w.waterEnergy + 0.5 * energy);
+}
+
+// ═══════════════════ 绘制 ═══════════════════
+function smooth01(x) { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); }
+
+function drawBackground(ctx) {
+  const w = world;
+  // 夜空
+  let g = ctx.createLinearGradient(0, 0, 0, HORIZON_Y);
+  g.addColorStop(0, '#03070f'); g.addColorStop(0.7, '#081626'); g.addColorStop(1, '#0e2c3e');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, BASE_W, HORIZON_Y);
+  // 夜海
+  g = ctx.createLinearGradient(0, HORIZON_Y, 0, BASE_H);
+  g.addColorStop(0, '#0a2233'); g.addColorStop(1, '#04101c');
+  ctx.fillStyle = g; ctx.fillRect(0, HORIZON_Y, BASE_W, BASE_H - HORIZON_Y);
+  // 地平线光带
+  g = ctx.createLinearGradient(0, HORIZON_Y - 26, 0, HORIZON_Y + 30);
+  g.addColorStop(0, 'rgba(120,200,235,0)'); g.addColorStop(0.5, 'rgba(120,200,235,0.16)'); g.addColorStop(1, 'rgba(120,200,235,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, HORIZON_Y - 26, BASE_W, 56);
+  // 银河带柔光底（沿微星带方向的斜向亮带，繁星满天的"底味"）
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  ctx.translate(GEOM.cx, 255); ctx.rotate(0.48);
+  let mw = ctx.createLinearGradient(0, -100, 0, 100);
+  mw.addColorStop(0, 'rgba(160,205,240,0)');
+  mw.addColorStop(0.5, 'rgba(160,205,240,0.06)');
+  mw.addColorStop(1, 'rgba(160,205,240,0)');
+  ctx.fillStyle = mw;
+  ctx.fillRect(-430, -100, 860, 200);
+  ctx.restore();
+  // 星（英雄星带十字芒——肉眼"最亮的那几颗"）
+  for (const s of w.stars) {
+    const a = 0.42 + 0.28 * Math.sin(w.t * s.sp + s.ph);
+    ctx.fillStyle = s.cyan ? `rgba(168,226,255,${a})` : `rgba(235,244,255,${a})`;
+    ctx.fillRect(s.x, s.y, s.r, s.r);
+    if (s.hero) {
+      const fa = a * 0.55;
+      ctx.fillStyle = s.cyan ? `rgba(168,226,255,${fa})` : `rgba(235,244,255,${fa})`;
+      ctx.fillRect(s.x - s.r * 1.6, s.y + s.r * 0.4, s.r * 4.2, 0.9);
+      ctx.fillRect(s.x + s.r * 0.4, s.y - s.r * 1.6, 0.9, s.r * 4.2);
+    }
+  }
+  // 流星（拖尾渐变 + 头部亮点，life 衰减）
+  for (const m of w.meteors) {
+    const tx = m.x - m.vx * 0.22, ty = m.y - m.vy * 0.22;
+    const lg = ctx.createLinearGradient(m.x, m.y, tx, ty);
+    lg.addColorStop(0, `rgba(235,246,255,${0.85 * m.life})`);
+    lg.addColorStop(1, 'rgba(235,246,255,0)');
+    ctx.strokeStyle = lg; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(m.x, m.y); ctx.lineTo(tx, ty); ctx.stroke();
+    ctx.fillStyle = `rgba(240,250,255,${0.9 * m.life})`;
+    ctx.beginPath(); ctx.arc(m.x, m.y, 1.7, 0, 6.29); ctx.fill();
+  }
+  // 水面星辰倒影（竖向碎光痕，与对应英雄星同相同步闪烁）
+  for (const r of w.starReflections) {
+    const a = (0.42 + 0.28 * Math.sin(w.t * r.sp + r.ph)) * 0.72;
+    if (a < 0.08) continue;
+    ctx.fillStyle = r.cyan ? `rgba(150,215,245,${a})` : `rgba(200,228,250,${a})`;
+    for (let j = 0; j < r.segs; j++) {
+      const yy = HORIZON_Y + r.depth * 0.25 + j * (r.depth / r.segs);
+      const hw = Math.max(1.2, (5.5 - j * 1.3) * (0.7 + 0.3 * Math.sin(w.t * 1.6 + j * 1.9 + r.ph)));
+      const dx = Math.sin(w.t * 1.4 + j * 2.3 + r.ph) * 2.4;
+      ctx.fillRect(r.x - hw / 2 + dx, yy, hw, 1.5);
+    }
+  }
+  // 海面碎光
+  for (const s of w.shimmer) {
+    const x = (s.x0 + w.t * s.spd) % BASE_W;
+    const a = s.a * (0.6 + 0.4 * Math.sin(w.t * 0.8 + s.ph));
+    ctx.fillStyle = `rgba(150,215,245,${a})`;
+    ctx.fillRect(x, s.y, s.len, 1.4);
+  }
+  // 放归定居的灯
+  for (const L of w.lights) {
+    const tw = 0.75 + 0.25 * Math.sin(w.t * 0.9 + L.ph);
+    drawObjectGlow(ctx, L.x, L.y, 2, 38, '190,230,255', 0.6 * tw);
+    ctx.fillStyle = `rgba(230,246,255,${0.95 * tw})`;
+    ctx.beginPath(); ctx.arc(L.x, L.y, 3.2, 0, 6.29); ctx.fill();
+    ctx.fillStyle = `rgba(150,215,245,${0.22 * tw})`;
+    ctx.fillRect(L.x - 7, L.y + 8, 14, 1.4);
+    ctx.fillRect(L.x - 4, L.y + 14, 8, 1.2);
+  }
+  // 瓶后环境光晕
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  g = ctx.createRadialGradient(GEOM.cx, GEOM.cy - 30, 50, GEOM.cx, GEOM.cy - 30, 370);
+  g.addColorStop(0, 'rgba(70,150,200,0.10)'); g.addColorStop(1, 'rgba(70,150,200,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 200, BASE_W, 950);
+  ctx.restore();
+  // 接触软影（贴瓶底，随瓶身几何派生）
+  const shY = GEOM.cy + 188 * K + 10;
+  g = ctx.createRadialGradient(GEOM.cx, shY, 26, GEOM.cx, shY, 108 * K * 1.15);
+  g.addColorStop(0, 'rgba(0,0,0,0.34)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.save();
+  ctx.translate(GEOM.cx, shY); ctx.scale(1, 0.12); ctx.translate(-GEOM.cx, -shY);
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(GEOM.cx, shY, 108 * K * 1.15, 0, 6.29); ctx.fill();
+  ctx.restore();
+}
+
+// 姿势 A：指数衰减径向光晕（lighter 加色）
+function drawObjectGlow(ctx, x, y, innerR_, outerR, colorRGB, scale) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const g = ctx.createRadialGradient(x, y, innerR_, x, y, outerR);
+  const s = scale === undefined ? 1 : scale;
+  g.addColorStop(0, `rgba(${colorRGB},${1.0 * s})`);
+  g.addColorStop(0.2, `rgba(${colorRGB},${0.6 * s})`);
+  g.addColorStop(0.5, `rgba(${colorRGB},${0.2 * s})`);
+  g.addColorStop(0.8, `rgba(${colorRGB},${0.05 * s})`);
+  g.addColorStop(1, `rgba(${colorRGB},0)`);
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(x, y, outerR, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// 船体路径（单位空间，原点 = 船中心水面线，侧视独木舟：舷缘近直、两端微翘、U 底）
+function defineHullPath(ctx, k) {
+  ctx.beginPath();
+  ctx.moveTo(-48 * k, -10 * k);
+  ctx.quadraticCurveTo(-20 * k, -4 * k, 30 * k, -5 * k);
+  ctx.quadraticCurveTo(44 * k, -5 * k, 46 * k, -9 * k);
+  ctx.quadraticCurveTo(47 * k, -4 * k, 40 * k, 2 * k);
+  ctx.quadraticCurveTo(0, 18 * k, -36 * k, 4 * k);
+  ctx.quadraticCurveTo(-50 * k, -2 * k, -48 * k, -10 * k);
+  ctx.closePath();
+}
+
+function drawBoatLocal(ctx) {
+  const w = world, b = w.boat, k = K;
+  const breathe = Math.sin(w.t * 1.1) * 1.6 * k;       // idle 浮沉
+  const breath = 1 + 0.012 * Math.sin(w.t * 0.9);      // 少年呼吸
+  ctx.save();
+  ctx.translate(b.x, b.y + b.bobY + breathe);
+  ctx.rotate(b.rock + Math.sin(w.t * 0.8) * 0.012);
+  ctx.scale(b.shrink, b.shrink);
+
+  const glow = b.glow * (0.85 + 0.15 * Math.sin(w.t * 1.3));
+  const ha = b.hullAlpha;
+  // 幻化光球（RISING 后段船形已隐，光是唯一实体——放行仪式的主角时刻，必须够亮）
+  if (b.orb > 0.01) {
+    drawObjectGlow(ctx, 0, 0, 4 * k, 26 * k, '190,232,255', b.orb * 0.75);
+    ctx.fillStyle = `rgba(235,250,255,${b.orb * 0.95})`;
+    ctx.beginPath(); ctx.arc(0, 0, 3.2 + b.orb * 2.2, 0, 6.29); ctx.fill();
+  }
+  if (ha <= 0 || glow <= 0.01) { ctx.restore(); return; }
+
+  // 船底水上光晕（lighter）
+  drawObjectGlow(ctx, 0, 2 * k, 4 * k, 52 * k, '159,220,255', 0.34 * glow * ha);
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  // 发光壳体：竖向渐变填充（半透明光壳，不再是"只有描边的盘子"）
+  const hullG = ctx.createLinearGradient(0, -10 * k, 0, 22 * k);
+  hullG.addColorStop(0, `rgba(200,240,255,${0.20 * glow * ha})`);
+  hullG.addColorStop(0.5, `rgba(150,220,255,${0.07 * glow * ha})`);
+  hullG.addColorStop(1, `rgba(120,200,240,${0.15 * glow * ha})`);
+  ctx.fillStyle = hullG;
+  defineHullPath(ctx, k); ctx.fill();
+  // 舷缘双描边（宽淡晕 + 窄亮芯）
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.strokeStyle = `rgba(140,210,250,${0.32 * glow * ha})`;
+  ctx.lineWidth = 6 * k * 0.55;
+  defineHullPath(ctx, k); ctx.stroke();
+  ctx.strokeStyle = `rgba(234,249,255,${0.92 * Math.min(1, glow) * ha})`;
+  ctx.lineWidth = 1.8 * k * 0.55;
+  defineHullPath(ctx, k); ctx.stroke();
+  // 舷缘压条（cap rail：贴舷缘上沿的第二道实体线，船是"有厚度的东西"不是轮廓线）
+  ctx.strokeStyle = `rgba(214,244,255,${0.55 * glow * ha})`;
+  ctx.lineWidth = 2.4 * k * 0.55;
+  ctx.beginPath();
+  ctx.moveTo(-45.5 * k, -11.2 * k);
+  ctx.quadraticCurveTo(-20 * k, -5.4 * k, 30 * k, -6.4 * k);
+  ctx.quadraticCurveTo(43.5 * k, -6.4 * k, 45.2 * k, -9.8 * k);
+  ctx.stroke();
+  ctx.restore();
+
+  // 船舱内凹暗腔（读作"可以坐进去"的空间）
+  ctx.save();
+  ctx.translate(0, 2 * k);
+  ctx.scale(0.84, 0.62);
+  ctx.fillStyle = `rgba(4,14,26,${0.62 * ha})`;
+  defineHullPath(ctx, k); ctx.fill();
+  ctx.restore();
+  // 船肋（3 条内骨线，随船底弧度收——木船的内部结构暗示）
+  ctx.strokeStyle = `rgba(165,218,250,${0.26 * glow * ha})`;
+  ctx.lineWidth = 1.3 * k * 0.55;
+  ctx.lineCap = 'round';
+  for (const rx of [-19, 1, 20]) {
+    const botY = (18 * (1 - (rx / 42) * (rx / 42))) * k;
+    ctx.beginPath();
+    ctx.moveTo(rx * k, -4 * k);
+    ctx.quadraticCurveTo(rx * 0.92 * k, botY * 0.45, rx * 0.78 * k, botY - 1.5 * k);
+    ctx.stroke();
+  }
+  // 舱内坐板
+  ctx.strokeStyle = `rgba(200,238,255,${0.5 * glow * ha})`;
+  ctx.lineWidth = 1.6 * k * 0.55;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-24 * k, -3.5 * k); ctx.lineTo(-10 * k, -3.5 * k);
+  ctx.moveTo(10 * k, -3.5 * k); ctx.lineTo(24 * k, -3.5 * k);
+  ctx.stroke();
+
+  // 少年剪影（抱膝坐在船尾坐板上，面朝船舱——孤独的最小识别特征：圆头微垂/弓背/双臂环抱收起的膝）
+  ctx.save();
+  ctx.translate(26 * k, -3 * k); ctx.scale(1.15, 1.15 * breath);
+  const sil = `rgba(6,15,28,${0.96 * ha})`;
+  ctx.fillStyle = sil; ctx.strokeStyle = sil;
+  ctx.lineCap = 'round';
+  ctx.lineWidth = 7 * k * 0.55;
+  ctx.beginPath(); ctx.moveTo(2 * k, -5 * k); ctx.lineTo(-3 * k, -14 * k); ctx.stroke();   // 弓背躯干（前倾）
+  ctx.beginPath(); ctx.arc(-4.5 * k, -20.5 * k, 5.2 * k, 0, 6.29); ctx.fill();             // 头（微垂）
+  ctx.lineWidth = 4.5 * k * 0.55;
+  ctx.beginPath(); ctx.moveTo(1 * k, -5 * k); ctx.lineTo(-7 * k, -9.5 * k); ctx.stroke();  // 大腿（收起）
+  ctx.lineWidth = 3.4 * k * 0.55;
+  ctx.beginPath(); ctx.moveTo(-7 * k, -9.5 * k); ctx.lineTo(-5 * k, -1.5 * k); ctx.stroke(); // 小腿
+  ctx.lineWidth = 3 * k * 0.55;
+  ctx.beginPath(); ctx.moveTo(-2.5 * k, -13 * k);                                          // 手臂环抱膝头
+  ctx.quadraticCurveTo(-7.5 * k, -10.5 * k, -6.8 * k, -8 * k); ctx.stroke();
+  // 船光勾边（头顶与背缘被船光托住——剪影不沉进夜里）
+  ctx.strokeStyle = `rgba(170,225,255,${0.30 * glow * ha})`;
+  ctx.lineWidth = 1 * k * 0.55;
+  ctx.beginPath(); ctx.arc(-4.5 * k, -20.5 * k, 5.2 * k, -1.4, 0.9); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(2.6 * k, -5.5 * k); ctx.lineTo(-2.4 * k, -14 * k); ctx.stroke();
+  ctx.restore();
+
+  ctx.restore();
+}
+
+// 船体倒影：断续碎波横划，幅度随 waterEnergy（禁全屏均匀描边）
+function drawReflection(ctx) {
+  const w = world, b = w.boat, k = K;
+  if (b.hullAlpha <= 0 || b.glow <= 0.01) return;
+  const wob = 3 + w.waterEnergy * 14;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 6; i++) {
+    const yy = WL_Y + 10 + i * 11;
+    const hw = 40 * k * (1 - i / 7) * (0.85 + 0.15 * Math.sin(w.t * 1.8 + i));
+    const dx = Math.sin(w.t * 1.8 + i * 1.1) * wob;
+    const a = 0.26 * (1 - i / 6) * b.glow * b.hullAlpha;
+    if (a < 0.01) continue;
+    ctx.strokeStyle = `rgba(170,225,255,${a})`;
+    ctx.lineWidth = 2.6;
+    ctx.lineCap = 'round';
+    // 每行 3 段断划
+    for (let s = 0; s < 3; s++) {
+      const cx0 = b.x + dx + (s - 1) * hw * 0.72;
+      ctx.beginPath();
+      ctx.moveTo(cx0 - hw * 0.26, yy + Math.sin(w.t * 2.2 + s + i) * 1.6);
+      ctx.quadraticCurveTo(cx0, yy + 2.4, cx0 + hw * 0.26, yy + Math.sin(w.t * 2 + i - s) * 1.6);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+function drawBottleInterior(ctx) {
+  const w = world, k = K;
+  // 瓶内空气层
+  let g = ctx.createLinearGradient(0, MOUTH_Y, 0, WL_Y);
+  g.addColorStop(0, 'rgba(10,22,40,0.85)');
+  g.addColorStop(1, 'rgba(14,34,54,0.85)');
+  ctx.fillStyle = g; ctx.fillRect(-112 * k, MOUTH_Y, 224 * k, WL_Y - MOUTH_Y);
+  // 水体
+  g = ctx.createLinearGradient(0, WL_Y, 0, 188 * k);
+  g.addColorStop(0, 'rgba(13,63,82,0.92)');
+  g.addColorStop(0.5, 'rgba(9,42,60,0.94)');
+  g.addColorStop(1, 'rgba(5,24,36,0.96)');
+  ctx.fillStyle = g; ctx.fillRect(-112 * k, WL_Y, 224 * k, 188 * k - WL_Y);
+  // 水面近表层微光带（渐变带，不是均匀描边线）
+  g = ctx.createLinearGradient(0, WL_Y - 6, 0, WL_Y + 26);
+  g.addColorStop(0, `rgba(120,210,240,${0.10 + w.waterEnergy * 0.10})`);
+  g.addColorStop(1, 'rgba(120,210,240,0)');
+  ctx.fillStyle = g; ctx.fillRect(-112 * k, WL_Y - 6, 224 * k, 32);
+  // 水面碎闪点（断续元素定义表面）
+  for (let i = 0; i < 10; i++) {
+    const sx = Math.sin(i * 37.7) * 88 * k;
+    const tw = Math.sin(w.t * 1.5 + i * 2.1);
+    if (tw < 0.2) continue;
+    ctx.fillStyle = `rgba(180,230,250,${0.18 * tw + w.waterEnergy * 0.12})`;
+    ctx.fillRect(sx - 3, WL_Y - 1 + Math.sin(i * 11) * 2, 6, 1.4);
+  }
+  // 微光浮游
+  for (const m of w.motes) {
+    const a = 0.30 + 0.22 * Math.sin(w.t * 1.3 + m.ph);
+    drawObjectGlow(ctx, m.x, m.y, 1, m.r * 4.5, '150,225,255', a);
+    ctx.fillStyle = `rgba(220,245,255,${a + 0.2})`;
+    ctx.beginPath(); ctx.arc(m.x, m.y, m.r * 0.55, 0, 6.29); ctx.fill();
+  }
+  drawReflection(ctx);
+  if (w.boat.mode !== 'EXITING' && w.boat.mode !== 'SETTLED' && w.boat.mode !== 'GONE') {
+    drawBoatLocal(ctx);
+  }
+  // 涟漪环（水面透视椭圆）
+  for (const r of w.ripples) {
+    const p = r.age / 1.4;
+    const a = 0.5 * (1 - p) * (0.5 + r.e * 0.5);
+    ctx.strokeStyle = `rgba(165,228,255,${a})`;
+    ctx.lineWidth = 2.2 - p * 1.2;
+    ctx.beginPath();
+    ctx.ellipse(r.x, WL_Y + 2, r.r, r.r * 0.22, 0, 0, 6.29);
+    ctx.stroke();
+  }
+}
+
+// 沿瓶壁派生的高光路径：side=-1 左壁 / +1 右壁，insetU 向瓶内收（单位 u）
+// 控制点全部取自 defineBottlePath 同侧段——高光贴壁是几何保证，不是手感
+function defineWallHighlightPath(ctx, side, insetU) {
+  const k = K, i = insetU * k, s = side;
+  ctx.beginPath();
+  ctx.moveTo(s * (30 * k - i * 0.4), -95 * k);
+  ctx.bezierCurveTo(
+    s * (30 * k - i * 0.4), -60 * k,
+    s * (108 * k - i), -35 * k,
+    s * (108 * k - i), 30 * k
+  );
+  ctx.lineTo(s * (108 * k - i), 122 * k);
+}
+
+function drawGlass(ctx) {
+  const w = world, k = K;
+  const breatheGlass = 0.92 + 0.08 * Math.sin(w.t * 0.5);
+
+  // Pass 3a 瓶底厚度
+  let g = ctx.createLinearGradient(0, 152 * k, 0, 178 * k);
+  g.addColorStop(0, 'rgba(10,18,48,0.45)');
+  g.addColorStop(1, 'rgba(3,8,24,0.8)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.ellipse(0, 165 * k, 98 * k, 13 * k, 0, 0, 6.29); ctx.fill();
+
+  // Pass 3b 菲涅尔边缘（横向渐变描边）
+  g = ctx.createLinearGradient(-108 * k, 0, 108 * k, 0);
+  g.addColorStop(0, 'rgba(120,180,220,0.25)');
+  g.addColorStop(0.04, 'rgba(230,242,255,0.8)');
+  g.addColorStop(0.5, 'rgba(140,190,230,0.15)');
+  g.addColorStop(0.96, 'rgba(230,242,255,0.5)');
+  g.addColorStop(1, 'rgba(120,180,220,0.2)');
+  ctx.strokeStyle = g;
+  ctx.lineWidth = 3.5 * k * 0.55;
+  defineBottlePath(ctx, 0); ctx.stroke();
+
+  // Pass 3c 高光带（V1 贴壁变体：沿瓶壁派生的粗描边 + blur；硬边=布条，脱壁=棉花，都禁止）
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  ctx.filter = 'blur(' + Math.round(12 * k * 0.55) + 'px)';
+  ctx.lineCap = 'round';
+  // 左主光带（贴左内壁，inset 10u）
+  let hg = ctx.createLinearGradient(0, -95 * k, 0, 122 * k);
+  hg.addColorStop(0, `rgba(255,255,255,${0.55 * breatheGlass})`);
+  hg.addColorStop(0.6, `rgba(255,255,255,${0.28 * breatheGlass})`);
+  hg.addColorStop(1, 'rgba(255,255,255,0.05)');
+  ctx.strokeStyle = hg;
+  ctx.lineWidth = 14 * k * 0.55;
+  defineWallHighlightPath(ctx, -1, 10); ctx.stroke();
+  // 右窄反光带（贴右内壁，inset 9u，更细更短，服从同一光源）
+  hg = ctx.createLinearGradient(0, -70 * k, 0, 100 * k);
+  hg.addColorStop(0, 'rgba(255,255,255,0.13)');
+  hg.addColorStop(1, 'rgba(255,255,255,0.02)');
+  ctx.strokeStyle = hg;
+  ctx.lineWidth = 7 * k * 0.55;
+  defineWallHighlightPath(ctx, 1, 9); ctx.stroke();
+  ctx.restore();
+
+  // 环境反光斑（左下，通透感主要来源）
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  defineBottlePath(ctx, 2); ctx.clip();
+  g = ctx.createRadialGradient(-58 * k, 120 * k, 8, -58 * k, 120 * k, 70 * k);
+  g.addColorStop(0, 'rgba(180,225,255,0.16)');
+  g.addColorStop(1, 'rgba(180,225,255,0)');
+  ctx.fillStyle = g; ctx.fillRect(-128 * k, 50 * k, 140 * k, 140 * k);
+  ctx.restore();
+
+  // 瓶口反射环（触摸时变亮——容器级反馈）
+  ctx.save();
+  ctx.strokeStyle = `rgba(220,240,255,${0.45 + w.touchGlow * 0.4})`;
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.ellipse(0, MOUTH_Y, 30 * k, 6 * k, 0, 0, 6.29); ctx.stroke();
+  ctx.restore();
+
+  // 金丝绳
+  ctx.strokeStyle = 'rgba(180,140,80,0.9)'; ctx.lineWidth = 3 * k * 0.55;
+  ctx.beginPath(); ctx.moveTo(-30 * k, -118 * k); ctx.lineTo(30 * k, -118 * k); ctx.stroke();
+  ctx.strokeStyle = 'rgba(215,175,105,0.9)'; ctx.lineWidth = 2 * k * 0.55;
+  ctx.beginPath(); ctx.moveTo(-30 * k, -114 * k); ctx.lineTo(30 * k, -114 * k); ctx.stroke();
+
+  // 软木塞（开合变换 + 与瓶口嵌入）
+  const a = w.corkAnim;
+  ctx.save();
+  ctx.translate(34 * k * a, -160 * k - 76 * k * a + Math.sin(w.t * 1.4) * 3 * a);
+  ctx.rotate(0.55 * a);
+  const corkG = ctx.createLinearGradient(0, -12 * k, 0, 12 * k);
+  corkG.addColorStop(0, '#c89260'); corkG.addColorStop(0.45, '#a67242');
+  corkG.addColorStop(0.8, '#6e4322'); corkG.addColorStop(1, '#4a2612');
+  ctx.fillStyle = corkG;
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(-29 * k, -12 * k, 58 * k, 24 * k, 5 * k); else ctx.rect(-29 * k, -12 * k, 58 * k, 24 * k);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,228,185,0.28)';
+  ctx.beginPath(); ctx.ellipse(0, -12 * k, 26 * k, 4 * k, 0, 0, 6.29); ctx.fill();
+  ctx.restore();
+
+  // 可点提示（无文字：塞下缝隙呼吸微光）
+  if (!w.corkOpen && w.reveal > 0.98) {
+    const ha = 0.35 + 0.3 * Math.sin(w.t * 1.7);
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.strokeStyle = `rgba(190,230,255,${ha * 0.5})`;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.ellipse(0, MOUTH_Y + 2, 34 * k, 8 * k, 0, 0.3, 2.84); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// 开塞光束（屏幕空间；楔形必须 blur 化雾锥，硬边=棍子）
+function drawEscapeBeam(ctx) {
+  const w = world, k = K, a = w.corkAnim;
+  if (a < 0.4) return;
+  const mx = GEOM.cx, my = GEOM.cy + MOUTH_Y;
+  const flicker = 0.85 + 0.15 * Math.sin(w.t * 2.3);
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  ctx.filter = 'blur(' + Math.round(7 * k) + 'px)';
+  // 外层宽淡
+  ctx.fillStyle = `rgba(170,225,255,${0.22 * a * flicker})`;
+  ctx.beginPath();
+  ctx.moveTo(mx, my);
+  ctx.lineTo(mx - 18 * k * a, my - 120 * k);
+  ctx.lineTo(mx + 18 * k * a, my - 120 * k);
+  ctx.closePath(); ctx.fill();
+  // 内层窄亮芯
+  ctx.fillStyle = `rgba(220,244,255,${0.30 * a * flicker})`;
+  ctx.beginPath();
+  ctx.moveTo(mx, my);
+  ctx.lineTo(mx - 8 * k * a, my - 60 * k);
+  ctx.lineTo(mx + 8 * k * a, my - 60 * k);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+  drawObjectGlow(ctx, mx, my, 4, 60, '170,225,255', 0.35 * a);
+}
+
+// 逃逸中的船（屏幕空间：船形渐隐 → 光球）
+function drawEscapingBoat(ctx) {
+  const b = world.boat;
+  if (b.mode !== 'EXITING') return;
+  const orbT = Math.min(1, b.exitT / 0.8);
+  drawObjectGlow(ctx, b.sx, b.sy, 3, 26 + orbT * 20, '190,232,255', 0.55 + orbT * 0.3);
+  ctx.fillStyle = `rgba(235,250,255,${0.7 + orbT * 0.3})`;
+  ctx.beginPath(); ctx.arc(b.sx, b.sy, 2.5 + orbT * 1.5, 0, 6.29); ctx.fill();
+  if (b.hullAlpha > 0.01) {
+    ctx.save();
+    ctx.translate(b.sx, b.sy);
+    ctx.globalAlpha = b.hullAlpha;
+    ctx.strokeStyle = 'rgba(234,249,255,0.9)';
+    ctx.lineWidth = 1.8 * K * 0.55;
+    ctx.lineJoin = 'round';
+    defineHullPath(ctx, K); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawVignette(ctx) {
+  const g = ctx.createRadialGradient(BASE_W / 2, BASE_H / 2, BASE_H * 0.28, BASE_W / 2, BASE_H / 2, BASE_H * 0.72);
+  g.addColorStop(0, 'rgba(2,6,12,0)');
+  g.addColorStop(1, 'rgba(2,6,12,0.30)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, BASE_W, BASE_H);
+}
+
+// ═══════════════════ p5 生命周期 ═══════════════════
+function setup() {
+  const cvs = createCanvas(BASE_W, BASE_H);
+  cvs.parent('pixel-stage');
+  pixelDensity(1);
+  sizeStage();
+  world = initWorld(SEED);
+  if (PARAMS.get('opencork') === '1' || PARAMS.get('autorelease') === '1') {
+    world.reveal = 1;
+    world.corkOpen = true;
+  }
+  // ?shot=N 确定性取景：用生产 updateWorld 以 1/60 步长预推进 N 秒（headless rAF 不可验的测试钩子）
+  const shotT = parseFloat(PARAMS.get('shot') || '0');
+  if (shotT > 0) {
+    const n = Math.min(Math.floor(shotT * 60), 3600);
+    for (let i = 0; i < n; i++) updateWorld(1 / 60, 1 / 60);
+  }
+  // ?ripple=1 交互态取景：预推进后注入两圈涟漪再走到波前扩散中段
+  if (PARAMS.get('ripple') === '1') {
+    spawnRipple(24 * K, 1);
+    spawnRipple(-34 * K, 0.8);
+    for (let i = 0; i < 24; i++) updateWorld(1 / 60, 1 / 60);
+  }
+  const layer = document.getElementById('interact-layer');
+  layer.addEventListener('pointerdown', handlePointer, { passive: false });
+  layer.addEventListener('pointermove', handleDrag, { passive: false });
+}
+function sizeStage() {
+  const s = document.getElementById('pixel-stage');
+  const scale = Math.min(windowWidth / BASE_W, windowHeight / BASE_H);
+  s.style.width = Math.floor(BASE_W * scale) + 'px';
+  s.style.height = Math.floor(BASE_H * scale) + 'px';
+}
+function windowResized() { sizeStage(); }
+function stagePoint(evt) {
+  const r = document.getElementById('pixel-stage').getBoundingClientRect();
+  return { x: (evt.clientX - r.left) * BASE_W / r.width, y: (evt.clientY - r.top) * BASE_H / r.height };
+}
+function toLocal(sx, sy) { return { x: sx - GEOM.cx, y: sy - GEOM.cy }; }
+
+let lastDragRipple = { x: -999, y: -999 };
+function handlePointer(evt) {
+  evt.preventDefault();
+  ensureAudio();
+  if (world.reveal < 0.95) return;
+  const p = stagePoint(evt);
+  const l = toLocal(p.x, p.y);
+
+  // 瓶塞命中（关时在瓶口，开时悬浮右上方）
+  const ckCX = 34 * K * world.corkAnim, ckCY = -160 * K - 76 * K * world.corkAnim;
+  if (Math.abs(l.x - ckCX) < 46 * K && Math.abs(l.y - ckCY) < 30 * K) {
+    world.corkOpen = !world.corkOpen;
+    ping(196, 0.16, 0.25); ping(392, 0.08, 0.18, 0.05);
+    return;
+  }
+  // 水面触摸 → 涟漪（局部扰动场）
+  if (l.y > WL_Y - 14 * K && l.y < 188 * K && Math.abs(l.x) < innerR(l.y)) {
+    spawnRipple(l.x, 1);
+    world.touchGlow = 1;
+    ping(PENTA[Math.floor(mulberry32((world.t * 997) | 0)() * PENTA.length)], 0.10, 0.7);
+    lastDragRipple = { x: p.x, y: p.y };
+  }
+}
+function handleDrag(evt) {
+  if (!evt.buttons) return;
+  evt.preventDefault();
+  if (world.reveal < 0.95) return;
+  const p = stagePoint(evt);
+  if (Math.hypot(p.x - lastDragRipple.x, p.y - lastDragRipple.y) < 30) return;
+  const l = toLocal(p.x, p.y);
+  if (l.y > WL_Y - 14 * K && l.y < 188 * K && Math.abs(l.x) < innerR(l.y)) {
+    spawnRipple(l.x, 0.8);
+    world.touchGlow = Math.min(1, world.touchGlow + 0.5);
+    lastDragRipple = { x: p.x, y: p.y };
+  }
+}
+
+function draw() {
+  const rawDt = Math.min(0.05, deltaTime * 0.001);
+  const dt = rawDt;
+  updateWorld(dt, rawDt);
+
+  const ctx = drawingContext;
+  ctx.clearRect(0, 0, BASE_W, BASE_H);
+
+  drawBackground(ctx);
+
+  const rv = world.reveal;
+  ctx.save();
+  ctx.translate(GEOM.cx, GEOM.cy);
+  // Pass 1 瓶后体块
+  if (rv > 0.15) {
+    ctx.save();
+    ctx.globalAlpha = smooth01((rv - 0.15) / 0.3);
+    defineBottlePath(ctx, 0);
+    const g = ctx.createRadialGradient(0, 20 * K, 40 * K, 0, 20 * K, 200 * K);
+    g.addColorStop(0, 'rgba(16,26,48,0.30)');
+    g.addColorStop(1, 'rgba(8,14,30,0.55)');
+    ctx.fillStyle = g; ctx.fill();
+    ctx.restore();
+  }
+  // Pass 2 瓶内世界（clip 唯一入口）
+  if (rv > 0.4) {
+    ctx.save();
+    ctx.globalAlpha = smooth01((rv - 0.4) / 0.25);
+    defineBottlePath(ctx, 2); ctx.clip();
+    drawBottleInterior(ctx);
+    ctx.restore();
+  }
+  // Pass 3 玻璃质感
+  if (rv > 0.15) {
+    ctx.save();
+    ctx.globalAlpha = smooth01((rv - 0.15) / 0.3);
+    drawGlass(ctx);
+    ctx.restore();
+  }
+  ctx.restore();
+
+  // 屏幕空间层
+  if (rv > 0.9) {
+    drawEscapeBeam(ctx);
+    drawEscapingBoat(ctx);
+  }
+  drawVignette(ctx);
+}
+</script>
+
+<script type="application/pixel-bloom-qa">
+// QA 坐标约定：entities/contains 均使用瓶内局部坐标（原点 geom.cx/cy，+y 向下）；
+// 仅 EXITING 状态的船切换为舞台坐标，同时 allowEscape=true（合法逃逸：放行仪式）。
+globalThis.__PIXEL_BLOOM_QA__ = {
+  horizonSeconds: 30,
+  dt: 1 / 60,
+  requiredStates: ['IDLE', 'CENTERING', 'RISING', 'EXITING', 'SETTLED'],
+  terminalStates: ['SETTLED'],
+
+  reset() {
+    world = initWorld(1234);
+    world.reveal = 1;
+  },
+  begin() {
+    world.corkOpen = true;
+  },
+  step(dt) {
+    updateWorld(dt, dt);
+  },
+  state() {
+    return world.released ? 'SETTLED' : world.boat.mode;
+  },
+  entities() {
+    const list = [];
+    const b = world.boat, k = K;
+    if (b.mode === 'EXITING') {
+      list.push({
+        id: 'boat',
+        allowEscape: true,
+        escapeReason: '放行仪式：小船穿出瓶口，化作背景夜海的灯',
+        points: [
+          [b.sx - 48 * k, b.sy - 40 * k], [b.sx + 48 * k, b.sy - 40 * k],
+          [b.sx - 48 * k, b.sy + 30 * k], [b.sx + 48 * k, b.sy + 30 * k],
+          [b.sx, b.sy - 40 * k], [b.sx, b.sy + 30 * k]
+        ]
+      });
+    } else if (b.mode !== 'GONE' && b.mode !== 'SETTLED') {
+      // 条件性外沿：船形可见时按船体包围盒（随 shrink 收束）；
+      // 幻化成光球后（hullAlpha<=0.05）只按光球外沿，不把已隐形的船体算成越界
+      if (b.hullAlpha > 0.05) {
+        const s = b.shrink || 1;
+        // 实测外沿：船体盒（半宽 49k·s，竖向 -12k~+20k）+ 少年头圆（抱膝坐姿：中心 (20.8k,-26.6k)，r 6k）
+        const hw = 49 * k * s, hTop = b.y - 12 * k * s, hBot = b.y + 20 * k * s;
+        const headX = b.x + 21 * k * s, headY = b.y - 27 * k * s, hr = 6.5 * k * s;
+        list.push({
+          id: 'boat',
+          points: [
+            [b.x - hw, hTop], [b.x + hw, hTop], [b.x - hw, hBot], [b.x + hw, hBot],
+            [b.x - hw, b.y], [b.x + hw, b.y],
+            [headX - hr, headY], [headX + hr, headY], [headX, headY - hr], [headX, headY + hr]
+          ]
+        });
+      } else {
+        const or_ = 20 * k;
+        list.push({
+          id: 'boat-orb',
+          points: [[b.x - or_, b.y], [b.x + or_, b.y], [b.x, b.y - or_], [b.x, b.y + or_]]
+        });
+      }
+    }
+    world.motes.forEach((m, i) => {
+      list.push({
+        id: 'mote-' + i,
+        points: [[m.x - m.r, m.y], [m.x + m.r, m.y], [m.x, m.y - m.r], [m.x, m.y + m.r]]
+      });
+    });
+    return list;
+  },
+  contains(x, y) {
+    // 上界放宽到瓶口上方 16k：放行时光球辉光溢出瓶口属合法光柱（宽度仍受颈部 innerR 约束）
+    if (y < -172 * K || y > 190 * K) return false;
+    return Math.abs(x) <= innerR(y) + 2;
+  }
+};
+</script>
+</body></html>
