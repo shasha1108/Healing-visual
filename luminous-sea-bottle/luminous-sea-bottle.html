@@ -14,7 +14,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
 <title>玻璃瓶里的夜光海</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
 <script>window.p5||document.write('<script src="https://cdn.bootcdn.net/ajax/libs/p5.js/1.9.0/p5.min.js"><\/script>');</script>
@@ -37,7 +37,8 @@
   }
   #pixel-stage{
     position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
-    width:540px;height:720px;overflow:hidden;border-radius:20px;z-index:2;
+    width:540px;height:720px;transform-origin:center center;
+    overflow:hidden;border-radius:20px;z-index:2;
   }
   #pixel-stage canvas{
     position:absolute;left:0;top:0;width:100% !important;height:100% !important;
@@ -71,12 +72,18 @@ function setup(){
 function sizeStage(){
   const stage=document.getElementById('pixel-stage');
   if(!stage)return;
-  const sc=Math.min(window.innerWidth*0.94/CW,window.innerHeight*0.94/CH);
-  stage.style.width=Math.floor(CW*sc)+'px';
-  stage.style.height=Math.floor(CH*sc)+'px';
+  const viewport=window.visualViewport;
+  const vw=viewport?viewport.width:(document.documentElement.clientWidth||window.innerWidth);
+  const vh=viewport?viewport.height:(document.documentElement.clientHeight||window.innerHeight);
+  const sc=Math.min(vw*0.94/CW,vh*0.94/CH);
+  stage.style.width=CW+'px';
+  stage.style.height=CH+'px';
+  stage.style.transform=`translate(-50%,-50%) scale(${sc})`;
 }
 
 function windowResized(){sizeStage();}
+
+if(window.visualViewport)window.visualViewport.addEventListener('resize',sizeStage);
 
 function waterBounds(){
   return {
