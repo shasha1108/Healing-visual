@@ -23,7 +23,6 @@
       "layered-mountains"
     ],
     "canvas_2d": [
-      "golden-ripples",
       "glow-boat-bottle",
       "paper-boat-release",
       "eternal-bloom",
@@ -210,6 +209,45 @@
     ]
   },
   "works": [
+    {
+      "slug": "golden-ripples",
+      "title_en": "Golden Ripples",
+      "title_zh": "潮汐拾光 · 梯级金浪",
+      "tagline": "浮光跃金，潮落潮生——梯级金浪与行人剪影，一场慢节奏的海滩冥想",
+      "tech": [
+        "Three.js",
+        "Canvas 2D",
+        "WebGL"
+      ],
+      "render": "WebGL (Three.js)",
+      "has_audio": false,
+      "has_touch": true,
+      "particle_count": "N/A",
+      "dependencies": 1,
+      "healing_domain": "somatic",
+      "keywords": [
+        "canvas 2d",
+        "three.js",
+        "webgl",
+        "touch interaction",
+        "glsl shader"
+      ],
+      "use_cases": [
+        "canvas 2d",
+        "three.js",
+        "webgl",
+        "touch interaction",
+        "glsl shader"
+      ],
+      "files": [
+        "golden-ripples.html",
+        "golden-ripples.md"
+      ],
+      "preview_assets": [
+        "https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/golden-ripples/v-3d6713c27886/golden-ripples_1.gif"
+      ],
+      "date": "2026-08-20"
+    },
     {
       "slug": "glow-boat-bottle",
       "title_en": "Glow Boat Bottle",
@@ -1501,45 +1539,6 @@
         "layered-mountains.jpg"
       ],
       "date": "2026-06-11"
-    },
-    {
-      "slug": "golden-ripples",
-      "title_en": "Golden Ripples",
-      "title_zh": "潮汐拾光 · 梯级金浪",
-      "tagline": "浮光跃金，潮落潮生——梯级金浪与行人剪影，一场慢节奏的海滩冥想",
-      "tech": [
-        "Three.js",
-        "Canvas 2D",
-        "WebGL"
-      ],
-      "render": "WebGL (Three.js)",
-      "has_audio": false,
-      "has_touch": true,
-      "particle_count": "N/A",
-      "dependencies": 1,
-      "healing_domain": "somatic",
-      "keywords": [
-        "canvas 2d",
-        "three.js",
-        "webgl",
-        "touch interaction",
-        "glsl shader"
-      ],
-      "use_cases": [
-        "canvas 2d",
-        "three.js",
-        "webgl",
-        "touch interaction",
-        "glsl shader"
-      ],
-      "files": [
-        "golden-ripples.html",
-        "golden-ripples.md"
-      ],
-      "preview_assets": [
-        "https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/golden-ripples/v-3d6713c27886/golden-ripples_1.gif"
-      ],
-      "date": "2026-08-20"
     }
   ]
 }
