@@ -24,7 +24,6 @@
       "layered-mountains"
     ],
     "canvas_2d": [
-      "ink-in-forms",
       "glow-boat-bottle",
       "paper-boat-release",
       "eternal-bloom",
@@ -213,6 +212,45 @@
     ]
   },
   "works": [
+    {
+      "slug": "ink-in-forms",
+      "title_en": "Ink In Forms",
+      "title_zh": "墨中有相",
+      "tagline": "长按，把浮水中的彩墨交给一枚心印——太极、鹤影、山水、牡丹，成形后仍会呼吸，也仍会被指尖拨散。",
+      "tech": [
+        "Three.js",
+        "Canvas 2D",
+        "WebGL"
+      ],
+      "render": "WebGL (Three.js)",
+      "has_audio": false,
+      "has_touch": true,
+      "particle_count": "N/A",
+      "dependencies": 1,
+      "healing_domain": "meditation",
+      "keywords": [
+        "canvas 2d",
+        "three.js",
+        "webgl",
+        "touch interaction",
+        "glsl shader"
+      ],
+      "use_cases": [
+        "canvas 2d",
+        "three.js",
+        "webgl",
+        "touch interaction",
+        "glsl shader"
+      ],
+      "files": [
+        "ink-in-forms.html",
+        "ink-in-forms.md"
+      ],
+      "preview_assets": [
+        "https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/ink-in-forms/v-2d04b3a1c0ee/ink-in-forms_1.gif"
+      ],
+      "date": "2026-08-24"
+    },
     {
       "slug": "golden-ripples",
       "title_en": "Golden Ripples",
@@ -1543,45 +1581,6 @@
         "layered-mountains.jpg"
       ],
       "date": "2026-06-11"
-    },
-    {
-      "slug": "ink-in-forms",
-      "title_en": "Ink In Forms",
-      "title_zh": "墨中有相",
-      "tagline": "长按，把浮水中的彩墨交给一枚心印——太极、鹤影、山水、牡丹，成形后仍会呼吸，也仍会被指尖拨散。",
-      "tech": [
-        "Three.js",
-        "Canvas 2D",
-        "WebGL"
-      ],
-      "render": "WebGL (Three.js)",
-      "has_audio": false,
-      "has_touch": true,
-      "particle_count": "N/A",
-      "dependencies": 1,
-      "healing_domain": "meditation",
-      "keywords": [
-        "canvas 2d",
-        "three.js",
-        "webgl",
-        "touch interaction",
-        "glsl shader"
-      ],
-      "use_cases": [
-        "canvas 2d",
-        "three.js",
-        "webgl",
-        "touch interaction",
-        "glsl shader"
-      ],
-      "files": [
-        "ink-in-forms.html",
-        "ink-in-forms.md"
-      ],
-      "preview_assets": [
-        "https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/ink-in-forms/v-2d04b3a1c0ee/ink-in-forms_1.gif"
-      ],
-      "date": "2026-08-24"
     }
   ]
 }
