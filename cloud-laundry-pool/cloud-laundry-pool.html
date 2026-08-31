@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<!--
+  Title: Cloud Laundry Pool · 晾云池
+  Concept: 触点成为云的临时低点；湿重向低点迁移，松手后排水滞后，再回到安静。
+  Tech: p5.js, Canvas 2D
+  Keywords: p5.js, canvas 2d, touch interaction
+  Features: Pixel-art p5.js courtyard with deterministic cloud textures, touch-driven sagging and delayed rain release into a stone pool.
+  Render: Canvas2D (p5.js)
+  Audio: no
+  Touch: yes
+  Particles: N/A
+  Standalone: yes, single HTML file, 1 CDN dependencies
+  Repo: https://github.com/shasha1108/healing-visual-lab
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <meta name="theme-color" content="#cbd9c7">
+  <title>晾云池</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <script>window.p5||document.write('<script src="https://cdn.bootcdn.net/ajax/libs/p5.js/1.9.0/p5.min.js"><\/script>');</script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html,body{width:100%;height:100%;overflow:hidden;background:#cbd9c7;overscroll-behavior:none}
+    body{position:fixed;inset:0;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+    #canvas-container{position:absolute;inset:0;overflow:hidden;background:#cbd9c7}
+    canvas{position:absolute;inset:0;z-index:1;display:block;width:100%!important;height:100%!important;image-rendering:pixelated;image-rendering:crisp-edges;touch-action:none}
+  </style>
+</head>
+<body>
+<div id="canvas-container" aria-label="两朵潮湿的云被夹在晾衣绳上，蓝色雨水落进石池。触摸云朵，它会在指尖形成低点并缓慢排雨。"></div>
+
+<script>
+'use strict';
+
+const BASE_W = 720;
+const BASE_H = 960;
+const FIXED_SEED = 27082026;
+const RAIN_POOL_SIZE = 30;
+const MAX_RIPPLES = 48;
+const MAX_SPLASHES = 80;
+
+const PALETTE = Object.freeze({
+  name: 'Aqua Glass — Private Rain Courtyard',
+  skyTop: '#edf0df', skyMid: '#cddfd2', skyLow: '#9fbdb7',
+  cloud0: '#77999a', cloud1: '#9fb7b4', cloud2: '#c3d1cb', cloud3: '#e1e5d8', cloud4: '#f5efdc', cloud5: '#fff8e7',
+  cobaltDeep: '#053b91', cobalt: '#075ece', cobaltMid: '#2187e0', cobaltLight: '#72c8f2', cobaltWhite: '#d0f4ff',
+  stone0: '#293632', stone1: '#46544e', stone2: '#6d786f', stone3: '#96998b', stone4: '#c0b9a2',
+  pegDark: '#86350b', peg: '#e7620a', pegLight: '#ff9a27', rope: '#303935'
+});
+
+const GEO = Object.freeze({
+  ropeLeftX: 49, ropeRightX: 671, ropeY: 205, ropeSag: 17,
+  postLeftX: 28, postRightX: 650, postW: 42,
+  horizonY: 690,
+  poolBackY: 734, poolWaterY: 782, poolBottomY: 914,
+  poolOuterLeft: 60, poolOuterRight: 660,
+  poolWaterLeftTop: 116, poolWaterRightTop: 604,
+  poolWaterLeftBottom: 88, poolWaterRightBottom: 632
+});
+
+const CLOUD_SPECS = Object.freeze([
+  { id:'left', x:220, y:396, w:226, h:270, pinX:230, phase:0.35, depth:1, emitters:[-20,0,21] },
+  { id:'right', x:505, y:370, w:204, h:242, pinX:505, phase:2.15, depth:0.68, emitters:[-18,1,19] }
+]);
+
+const BAYER4 = [0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
+
+let stage;
+let clouds = [];
+let rainDrops = [];
+let ripples = [];
+let splashes = [];
+let atmosphere = [];
+let stoneMarks = [];
+let simTime = 0;
+let qaTime = 0;
+let view = { scale:1, x:0, y:0, stageW:BASE_W, stageH:BASE_H };
+let rope = { amplitude:0, velocity:0, sourceX:BASE_W/2, phase:0 };
+let water = { light:0 };
+let camera = { x:0, targetX:0 };
+let pointer = { active:false, id:null, mode:null, cloud:null, x:0, y:0, lastX:0, lastY:0, downTime:0 };
+let worldState = 'QUIET';
+
+const query = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
+const shotMode = query.get('shot') === '1';
+const reducedMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function mulberry32(seed) {
+  return function rng() {
+    let t = seed += 0x6D2B79F5;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function range(rng, low, high) { return low + (high - low) * rng(); }
+function clamp(value, low, high) { return Math.max(low, Math.min(high, value)); }
+function damp(value, target, rate, dt) { return value + (target - value) * (1 - Math.exp(-rate * dt)); }
+function smoothstep(edge0, edge1, x) { const t = clamp((x-edge0)/(edge1-edge0),0,1); return t*t*(3-2*t); }
+function fillHex(g, hex, alpha = 255) { const value=parseInt(hex.slice(1),16);g.fill((value>>16)&255,(value>>8)&255,value&255,alpha); }
+function strokeHex(g, hex, alpha = 255) { const value=parseInt(hex.slice(1),16);g.stroke((value>>16)&255,(value>>8)&255,value&255,alpha); }
+
+function setup() {
+  const canvas = createCanvas(windowWidth, windowHeight);
+  canvas.parent('canvas-container');
+  pixelDensity(1);
+  noSmooth();
+  drawingContext.imageSmoothingEnabled = false;
+  stage = createGraphics(BASE_W, BASE_H);
+  stage.pixelDensity(1);
+  stage.noSmooth();
+  stage.drawingContext.imageSmoothingEnabled = false;
+  initWorld(FIXED_SEED, true);
+  updateView();
+  bindPointerEvents(canvas.elt);
+  if (shotMode) activateShotState();
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  pixelDensity(1);
+  drawingContext.imageSmoothingEnabled = false;
+  updateView();
+}
+
+function initWorld(seed = FIXED_SEED, buildTextures = false) {
+  const rng = mulberry32(seed);
+  simTime = 0;
+  qaTime = 0;
+  worldState = 'QUIET';
+  rope = { amplitude:0, velocity:0, sourceX:BASE_W/2, phase:0 };
+  water = { light:0 };
+  camera = { x:0, targetX:0 };
+  ripples = [];
+  splashes = [];
+  clouds = CLOUD_SPECS.map((spec, index) => createCloud(spec, index, rng));
+  rainDrops = createRainPool(rng);
+  atmosphere = [];
+  for (let i=0;i<180;i+=1) atmosphere.push({ x:range(rng,0,BASE_W), y:range(rng,40,GEO.horizonY), size:rng()>0.88?3:2, alpha:range(rng,4,18), phase:range(rng,0,Math.PI*2) });
+  stoneMarks = [];
+  for (let i=0;i<360;i+=1) stoneMarks.push({ x:range(rng,0,BASE_W), y:range(rng,665,BASE_H), w:range(rng,2,11), h:range(rng,1,4), light:rng()>0.57, alpha:range(rng,8,30) });
+  if (buildTextures && typeof createGraphics === 'function') clouds.forEach(cloud => { cloud.texture = buildCloudTexture(cloud); });
+}
+
+function createCloud(spec, index, rng) {
+  const templates = index === 0 ? [
+    [-.08,-.37,.25,.24],[-.29,-.22,.27,.25],[.13,-.22,.36,.28],[.34,-.08,.26,.25],[-.36,.03,.31,.31],[-.05,.02,.43,.36],[.30,.13,.31,.28],[-.27,.25,.31,.27],[.04,.28,.38,.29],[.27,.34,.27,.22],[-.08,.43,.31,.20]
+  ] : [
+    [.05,-.39,.28,.24],[-.24,-.24,.30,.27],[.17,-.23,.37,.30],[.36,-.03,.29,.27],[-.37,.02,.29,.30],[-.08,.02,.43,.36],[.29,.13,.34,.30],[-.28,.25,.34,.28],[.02,.29,.41,.30],[.30,.34,.27,.22],[-.05,.44,.34,.20]
+  ];
+  const blobs = templates.map((item, blobIndex) => ({
+    x:(item[0]+range(rng,-.018,.018))*spec.w,
+    y:(item[1]+range(rng,-.015,.015))*spec.h,
+    rx:item[2]*spec.w,
+    ry:item[3]*spec.h,
+    depth:range(rng,-.22,.22)+(blobIndex%3===0?.12:0)
+  }));
+  return {
+    ...spec, blobs, texture:null,
+    energy:0, target:0, listen:0, hold:0, inertia:0,
+    compression:0, compressionVelocity:0, sway:0,
+    drainX:0, drainTargetX:0, wetFold:0,
+    echoTimer:-1, lateDropTimer:-1, lateDrop:{active:false,x:spec.x,y:spec.y+spec.h*.34,speed:190},
+    state:'REST', touch:{x:spec.x,y:spec.y}, rainRate:.04, visited:new Set(['REST'])
+  };
+}
+
+function createRainPool(rng) {
+  const drops = [];
+  for (let i=0;i<RAIN_POOL_SIZE;i+=1) {
+    const cloudIndex = i%2;
+    const cloud = clouds[cloudIndex];
+    drops.push({
+      cloudIndex, emitterIndex:i%cloud.emitters.length, rank:Math.floor(i/2)/(RAIN_POOL_SIZE/2),
+      xJitter:range(rng,-1.5,1.5), y:range(rng,cloud.y+cloud.h*.31,GEO.poolWaterY), speed:range(rng,145,225), length:range(rng,11,28), depth:range(rng,.55,1)
+    });
+  }
+  return drops;
+}
+
+function buildCloudTexture(cloud) {
+  const pad = 24;
+  const texW = Math.ceil(cloud.w+pad*2);
+  const texH = Math.ceil(cloud.h+pad*2);
+  const g = createGraphics(texW, texH);
+  g.pixelDensity(1);
+  g.noSmooth();
+  g.clear();
+  const cell = 3;
+  const colors = [PALETTE.cloud0,PALETTE.cloud1,PALETTE.cloud2,PALETTE.cloud3,PALETTE.cloud4,PALETTE.cloud5];
+  for (let py=0;py<texH;py+=cell) {
+    for (let px=0;px<texW;px+=cell) {
+      const lx = px-texW/2;
+      const ly = py-texH/2;
+      let field = 0;
+      let nearest = null;
+      let best = -1;
+      cloud.blobs.forEach(blob => {
+        const dx=(lx-blob.x)/blob.rx, dy=(ly-blob.y)/blob.ry;
+        const contribution=Math.exp(-(dx*dx+dy*dy)*2.25);
+        field+=contribution;
+        if (contribution>best) { best=contribution; nearest={dx,dy,blob}; }
+      });
+      const lobeEdge=Math.exp(-2.25);
+      if (best<lobeEdge || !nearest) continue;
+      const globalY=ly/cloud.h;
+      const dominantBlob=nearest.blob;
+      const directional=(-nearest.dx*.58-nearest.dy*.82);
+      const underside=nearest.dy>.05?smoothstep(.05,.95,nearest.dy)*.72:0;
+      const rightShade=nearest.dx>.12?smoothstep(.12,.95,nearest.dx)*.22:0;
+      const edgePenalty=(smoothstep(lobeEdge,.28,best)-1)*1.34;
+      const bayer=(BAYER4[((py/cell)&3)*4+((px/cell)&3)]/15-.5)*.34;
+      let value=3.72+directional-underside-rightShade-globalY*.64+edgePenalty+bayer+(dominantBlob?dominantBlob.depth:0);
+      if (globalY>.27) value-=.42;
+      const index=clamp(Math.floor(value),0,5);
+      g.noStroke(); g.fill(colors[index]); g.rect(px,py,cell,cell);
+      if (best>.24 && ((px/cell+py/cell)%13===0)) { g.fill(255,250,228,38); g.rect(px,py,cell,cell); }
+    }
+  }
+  return g;
+}
+
+function updateView() {
+  const s=Math.min(Math.max(1,windowWidth)/BASE_W,Math.max(1,windowHeight)/BASE_H);
+  view.scale=s; view.stageW=BASE_W*s; view.stageH=BASE_H*s;
+  view.x=(windowWidth-view.stageW)*.5; view.y=(windowHeight-view.stageH)*.58;
+}
+
+function bindPointerEvents(element) {
+  element.addEventListener('pointerdown',onPointerDown,{passive:false});
+  element.addEventListener('pointermove',onPointerMove,{passive:false});
+  element.addEventListener('pointerup',onPointerEnd,{passive:false});
+  element.addEventListener('pointercancel',onPointerEnd,{passive:false});
+  element.addEventListener('lostpointercapture',onPointerEnd,{passive:false});
+  element.addEventListener('contextmenu',event=>event.preventDefault());
+}
+
+function worldPoint(event) { return { x:(event.clientX-view.x)/view.scale, y:(event.clientY-view.y)/view.scale }; }
+
+function ropeYAt(x) {
+  const u=clamp((x-GEO.ropeLeftX)/(GEO.ropeRightX-GEO.ropeLeftX),0,1);
+  const distance=Math.abs(x-rope.sourceX);
+  return GEO.ropeY+Math.sin(u*Math.PI)*GEO.ropeSag+Math.sin(rope.phase-distance*.034)*rope.amplitude*Math.exp(-distance/245);
+}
+
+function cloudContains(cloud,x,y) {
+  const dx=(x-cloud.x-cloud.sway*11)/(cloud.w*.52), dy=(y-cloud.y)/(cloud.h*.53);
+  return dx*dx+dy*dy<1;
+}
+
+function onPointerDown(event) {
+  event.preventDefault(); if(pointer.active)return;
+  const p=worldPoint(event); pointer={active:true,id:event.pointerId,mode:null,cloud:null,x:p.x,y:p.y,lastX:p.x,lastY:p.y,downTime:0};
+  try{event.currentTarget.setPointerCapture(event.pointerId);}catch(_){}
+  const hit=clouds.find(cloud=>cloudContains(cloud,p.x,p.y));
+  if(hit){ pointer.mode='cloud';pointer.cloud=hit;beginListening(hit,p.x,p.y);return; }
+  pointer.active=false;pointer.id=null;
+}
+
+function onPointerMove(event) {
+  if(!pointer.active||event.pointerId!==pointer.id)return; event.preventDefault();
+  const p=worldPoint(event);
+  pointer.x=p.x;pointer.y=p.y;
+  if(pointer.mode==='cloud'&&pointer.cloud){
+    const cloud=pointer.cloud;
+    cloud.touch.x=clamp(p.x,cloud.x-cloud.w*.4,cloud.x+cloud.w*.4);
+    cloud.touch.y=clamp(p.y,cloud.y-cloud.h*.36,cloud.y+cloud.h*.30);
+    cloud.drainTargetX=clamp((cloud.touch.x-cloud.x)*.72,-cloud.w*.28,cloud.w*.28);
+    camera.targetX=reducedMotion?0:clamp((p.x/BASE_W-.5)*10,-5,5);
+  }
+  pointer.lastX=p.x;pointer.lastY=p.y;
+}
+
+function onPointerEnd(event) {
+  if(!pointer.active||(event.pointerId!==undefined&&event.pointerId!==pointer.id))return;event.preventDefault();
+  if(pointer.mode==='cloud'&&pointer.cloud)releaseCloud(pointer.cloud);
+  pointer.active=false;pointer.id=null;pointer.mode=null;pointer.cloud=null;
+  camera.targetX=0;
+}
+
+function beginListening(cloud,x,y) {
+  cloud.touch.x=clamp(x,cloud.x-cloud.w*.4,cloud.x+cloud.w*.4);cloud.touch.y=clamp(y,cloud.y-cloud.h*.36,cloud.y+cloud.h*.30);
+  cloud.drainTargetX=clamp((cloud.touch.x-cloud.x)*.72,-cloud.w*.28,cloud.w*.28);
+  cloud.state='LISTEN';cloud.listen=0;cloud.target=.12;cloud.hold=.8;cloud.visited.add('LISTEN');
+  rope.sourceX=cloud.pinX;rope.amplitude=Math.max(rope.amplitude,2.2);worldState='LISTEN';
+}
+
+function releaseCloud(cloud) {
+  const wasRain=cloud.state==='RAIN';
+  cloud.state='RETURN';cloud.visited.add('RETURN');cloud.inertia=Math.max(cloud.inertia,wasRain?cloud.energy*.86:.16);cloud.target=0;cloud.hold=Math.max(cloud.hold,wasRain?1.18:.72);
+  cloud.lateDropTimer=wasRain?2.15:.82;
+  const other=clouds.find(item=>item!==cloud);
+  if(other)other.echoTimer=wasRain?.38:.52;
+  rope.sourceX=cloud.pinX;rope.velocity+=wasRain?5.2:1.8;worldState='RETURN';
+}
+
+function activateShotState() {
+  const cloud=clouds[0]; cloud.state='RAIN';cloud.visited.add('LISTEN');cloud.visited.add('RAIN');cloud.listen=.7;cloud.energy=1;cloud.target=1;cloud.hold=1.45;cloud.inertia=.9;cloud.compression=.88;cloud.touch={x:cloud.x-30,y:cloud.y-26};cloud.drainX=-22;cloud.drainTargetX=-22;cloud.wetFold=.9;
+  rope.amplitude=7;rope.sourceX=cloud.pinX;water.light=.85;worldState='RAIN';
+  for(let i=0;i<7;i+=1)spawnRipple(185+i*31,GEO.poolWaterY+(i%2)*5,.78,'rain');
+}
+
+function updateWorld(dt) {
+  dt=clamp(dt,0,.05);simTime+=dt;pointer.downTime+=pointer.active?dt:0;
+  rope.phase+=dt*(reducedMotion?2.4:5.1);rope.velocity+=-rope.amplitude*11*dt;rope.velocity*=Math.pow(.91,dt*60);rope.amplitude+=rope.velocity*dt;rope.amplitude*=Math.pow(reducedMotion?.90:.968,dt*60);
+  if(Math.abs(rope.amplitude)<.02&&Math.abs(rope.velocity)<.02){rope.amplitude=0;rope.velocity=0;}
+  water.light=damp(water.light,0,.55,dt);
+  camera.x=damp(camera.x,camera.targetX,3.6,dt);
+  let activity=Math.abs(rope.amplitude)*.025;
+
+  clouds.forEach((cloud,index)=>{
+    const held=pointer.active&&pointer.mode==='cloud'&&pointer.cloud===cloud;
+    if(held){
+      cloud.listen+=dt;
+      if(cloud.listen<.25){cloud.state='LISTEN';cloud.target=.12+cloud.listen*.42;worldState='LISTEN';}
+      else{cloud.state='RAIN';cloud.visited.add('RAIN');cloud.target=clamp(.36+(cloud.listen-.25)*.72,.36,1);cloud.inertia=Math.max(cloud.inertia,cloud.target*.68);worldState='RAIN';}
+      cloud.hold=Math.max(cloud.hold,.12);
+    } else if(cloud.hold>0) cloud.hold-=dt;
+    else {cloud.target*=Math.pow(.63,dt*60);cloud.drainTargetX=damp(cloud.drainTargetX,0,1.2,dt);}
+
+    if(cloud.state==='RETURN')cloud.inertia*=Math.pow(.965,dt*60);
+    else cloud.inertia*=Math.pow(.91,dt*60);
+    const desired=Math.max(cloud.target,cloud.inertia);
+    cloud.energy=damp(cloud.energy,desired,held?8.5:2.2,dt);
+    cloud.drainX=damp(cloud.drainX,cloud.drainTargetX,held?6.5:2.1,dt);
+    const compressionTarget=held?(cloud.state==='LISTEN'?cloud.energy*.28:cloud.energy):0;
+    cloud.compressionVelocity+=(compressionTarget-cloud.compression)*55*dt;
+    cloud.compressionVelocity*=Math.pow(.84,dt*60);
+    cloud.compression=clamp(cloud.compression+cloud.compressionVelocity*dt,-.14,1.04);
+    cloud.wetFold=damp(cloud.wetFold,cloud.state==='RAIN'||cloud.state==='RETURN'?cloud.energy:0,cloud.state==='RAIN'?4.4:1.5,dt);
+    cloud.sway=damp(cloud.sway,lineWaveAt(cloud.pinX)/18,4.2,dt);
+    cloud.rainRate=cloud.state==='LISTEN'?0:clamp(.075+Math.max(0,cloud.energy-.12)*.73+Math.abs(cloud.sway)*.035,0,.74);
+
+    if(cloud.echoTimer>=0){
+      cloud.echoTimer-=dt;
+      if(cloud.echoTimer<=0){cloud.echoTimer=-1;cloud.lateDrop.active=true;cloud.lateDrop.x=cloud.x;cloud.lateDrop.y=cloud.y+cloud.h*.36;cloud.lateDrop.speed=178;}
+    }
+    if(!held&&cloud.lateDropTimer>=0){
+      cloud.lateDropTimer-=dt;
+      if(cloud.lateDropTimer<=0){cloud.lateDropTimer=-1;cloud.lateDrop.active=true;cloud.lateDrop.x=cloud.x+cloud.drainX;cloud.lateDrop.y=cloud.y+cloud.h*.36;cloud.lateDrop.speed=186;}
+    }
+    if(cloud.lateDrop.active){
+      cloud.lateDrop.y+=cloud.lateDrop.speed*dt;
+      if(cloud.lateDrop.y>=GEO.poolWaterY){spawnRipple(cloud.lateDrop.x,GEO.poolWaterY,.52,'rain');water.light=Math.max(water.light,.3);cloud.lateDrop.active=false;}
+    }
+    if(!held&&cloud.hold<=0&&cloud.energy<.025&&cloud.inertia<.02&&Math.abs(cloud.compression)<.018){cloud.energy=0;cloud.target=0;cloud.inertia=0;cloud.listen=0;cloud.drainTargetX=0;cloud.state='REST';cloud.visited.add('REST');}
+    activity+=cloud.energy+Math.abs(cloud.compression)+cloud.wetFold+(cloud.lateDrop.active ? .25 : 0)+(cloud.lateDropTimer>=0 ? .08 : 0)+(cloud.echoTimer>=0 ? .08 : 0);
+    updateRain(index,cloud,dt);
+  });
+
+  updateRipples(dt);updateSplashes(dt);
+  if(activity<.035&&!pointer.active){worldState='QUIET';}
+  else if(!pointer.active)worldState='RETURN';
+}
+
+function lineWaveAt(x){const d=Math.abs(x-rope.sourceX);return Math.sin(rope.phase-d*.034)*rope.amplitude*Math.exp(-d/245);}
+
+function updateRain(index,cloud,dt) {
+  const bottom=cloud.y+cloud.h*.37;
+  rainDrops.forEach(drop=>{
+    if(drop.cloudIndex!==index||drop.rank>cloud.rainRate)return;
+    drop.y+=drop.speed*(.56+drop.depth*.38*cloud.depth+cloud.energy*.72)*dt;
+    if(drop.y>=GEO.poolWaterY){
+      const emitter=cloud.emitters[drop.emitterIndex]*(.78-cloud.energy*.20);
+      const x=cloud.x+cloud.drainX+emitter+drop.xJitter+cloud.sway*10;
+      spawnRipple(x,GEO.poolWaterY+(drop.emitterIndex%2)*4,.28+cloud.energy*.58,'rain');
+      water.light=Math.max(water.light,.18+cloud.energy*.52);
+      if(cloud.energy>.38&&drop.rank<.28)spawnSplash(x,GEO.poolWaterY);
+      drop.y=bottom-drop.rank*38;
+    }
+  });
+}
+
+function spawnRipple(x,y,strength,kind) {const item={x:clamp(x,GEO.poolWaterLeftTop,GEO.poolWaterRightTop),y,radius:3,life:1,strength:clamp(strength,.1,1),kind};if(ripples.length>=MAX_RIPPLES)ripples.shift();ripples.push(item);}
+function updateRipples(dt){for(let i=ripples.length-1;i>=0;i-=1){const r=ripples[i];r.radius+=(18+r.strength*38)*dt;r.life-=(.28+(1-r.strength)*.12)*dt;if(r.life<=0)ripples.splice(i,1);}}
+function spawnSplash(x,y){for(let i=0;i<4;i+=1){if(splashes.length>=MAX_SPLASHES)splashes.shift();const sign=i<2?-1:1;splashes.push({x,y,vx:sign*(16+i*5),vy:-30-i*7,life:1,size:i%2?3:2});}}
+function updateSplashes(dt){for(let i=splashes.length-1;i>=0;i-=1){const s=splashes[i];s.x+=s.vx*dt;s.y+=s.vy*dt;s.vy+=105*dt;s.life-=1.35*dt;if(s.life<=0||s.y>GEO.poolWaterY+9)splashes.splice(i,1);}}
+
+function draw() {
+  updateWorld(Math.min(deltaTime*.001,.05));
+  drawViewportExtension();renderStage(stage);
+  push();translate(Math.round(view.x),Math.round(view.y));scale(view.scale);image(stage,0,0,BASE_W,BASE_H);pop();
+}
+
+function drawViewportExtension(){background(PALETTE.skyLow);noStroke();const horizon=view.y+GEO.horizonY*view.scale,stageBottom=view.y+view.stageH;fill(PALETTE.skyTop);rect(0,0,width,Math.max(0,horizon));fill(PALETTE.stone1);rect(0,horizon,width,height-horizon);fill(54,67,61);rect(0,Math.max(horizon,stageBottom),width,Math.max(0,height-stageBottom));fill(PALETTE.stone0);rect(0,Math.max(horizon,stageBottom+56),width,Math.max(0,height-stageBottom-56));}
+
+function drawLayer(g,factor,drawFn){g.push();g.translate(Math.round(camera.x*factor),0);drawFn();g.pop();}
+function renderStage(g){
+  g.clear();
+  drawLayer(g,.05,()=>drawAtmosphere(g));
+  drawLayer(g,.12,()=>drawCourtyard(g));
+  drawLayer(g,.22,()=>drawCloudShadows(g));
+  drawLayer(g,.38,()=>drawRope(g));
+  drawLayer(g,.50,()=>{clouds.slice().sort((a,b)=>a.depth-b.depth).forEach(cloud=>drawCloud(g,cloud));drawPins(g);});
+  drawLayer(g,.70,()=>drawRain(g));
+  drawLayer(g,.92,()=>drawPool(g));
+}
+
+function drawAtmosphere(g) {
+  g.noStroke();
+  const ctx=g.drawingContext;
+  const sky=ctx.createLinearGradient(0,0,0,GEO.horizonY);
+  sky.addColorStop(0,PALETTE.skyTop);sky.addColorStop(.34,PALETTE.skyMid);sky.addColorStop(.72,'#b7d0c5');sky.addColorStop(1,PALETTE.skyLow);
+  ctx.fillStyle=sky;ctx.fillRect(0,0,BASE_W,GEO.horizonY);
+  const light=ctx.createRadialGradient(88,72,8,88,72,430);
+  light.addColorStop(0,'rgba(255,250,225,.28)');light.addColorStop(.48,'rgba(250,244,220,.10)');light.addColorStop(1,'rgba(250,244,220,0)');
+  ctx.fillStyle=light;ctx.fillRect(0,0,560,520);
+  atmosphere.forEach(p=>{const drift=Math.sin(simTime*.11+p.phase)*2;g.fill(61,91,84,p.alpha);g.rect(Math.round(p.x+drift),Math.round(p.y),p.size,p.size);});
+  g.fill(232,238,222,56);g.rect(0,604,BASE_W,38);
+}
+
+function drawCourtyard(g) {
+  g.noStroke();
+  g.fill(121,139,130);g.rect(0,648,BASE_W,GEO.horizonY-648);
+  g.fill(187,191,174);g.rect(0,648,BASE_W,7);
+  g.fill(84,101,94);g.rect(0,683,BASE_W,7);
+  g.fill(PALETTE.stone1);g.rect(0,GEO.horizonY,BASE_W,BASE_H-GEO.horizonY);
+  g.fill(79,92,85);g.quad(0,GEO.horizonY,BASE_W,GEO.horizonY,BASE_W,770,0,770);
+  g.fill(64,77,71);g.quad(0,770,BASE_W,770,BASE_W,856,0,856);
+  g.fill(47,60,55);g.quad(0,856,BASE_W,856,BASE_W,BASE_H,0,BASE_H);
+  g.fill(39,53,48,145);g.quad(0,GEO.horizonY,96,GEO.horizonY,69,BASE_H,0,BASE_H);
+  g.fill(39,53,48,105);g.quad(BASE_W,GEO.horizonY,624,GEO.horizonY,650,BASE_H,BASE_W,BASE_H);
+  g.fill(190,184,158,25);g.quad(82,704,235,704,174,856,18,856);
+  g.fill(202,195,168,18);g.quad(516,704,650,704,704,856,548,856);
+  g.fill(28,39,36,105);g.quad(35,735,685,735,707,944,12,944);
+  drawPost(g,GEO.postLeftX);drawPost(g,GEO.postRightX);
+  stoneMarks.forEach(m=>{g.fill(m.light?210:25,m.light?204:35,m.light?180:31,m.alpha);g.rect(Math.round(m.x),Math.round(m.y),Math.round(m.w),Math.round(m.h));});
+}
+
+function drawPost(g,x){g.noStroke();const h=GEO.horizonY-135;g.fill(27,37,34,145);g.rect(x-7,166,GEO.postW+13,h);g.fill(PALETTE.stone2);g.rect(x,155,GEO.postW,h);g.fill(PALETTE.stone4);g.rect(x+5,155,8,h);g.fill(225,219,195,42);g.rect(x+13,155,4,h);g.fill(PALETTE.stone1);g.rect(x+GEO.postW-10,158,10,h-3);g.fill(PALETTE.stone0);g.rect(x+13,GEO.ropeY-5,11,11);g.fill(PALETTE.stone4);g.rect(x+17,GEO.ropeY-1,4,4);g.fill(28,39,36,115);g.quad(x-4,GEO.horizonY,x+GEO.postW+6,GEO.horizonY,x+GEO.postW+38,GEO.horizonY+33,x+14,GEO.horizonY+33);}
+
+function drawRope(g){g.noStroke();g.fill(PALETTE.rope);for(let x=GEO.ropeLeftX;x<=GEO.ropeRightX;x+=3)g.rect(x,Math.round(ropeYAt(x)),4,3);g.fill(207,215,194,55);for(let x=GEO.ropeLeftX+2;x<GEO.ropeRightX;x+=11)g.rect(x,Math.round(ropeYAt(x)),5,1);}
+
+function drawCloudShadows(g){
+  clouds.forEach(cloud=>{
+    if(!cloud.texture)return;
+    const ox=16+cloud.depth*7,oy=20+cloud.depth*9;
+    g.push();g.tint(31,45,42,cloud.depth>.9?34:25);g.image(cloud.texture,Math.round(cloud.x-cloud.texture.width/2+ox),Math.round(cloud.y-cloud.texture.height/2+oy));g.noTint();g.pop();
+  });
+}
+
+function drawCloud(g,cloud) {
+  const breath=reducedMotion?0:Math.sin(simTime*.63+cloud.phase)*.009;
+  const sx=1+breath+cloud.compression*.055,sy=1-breath-cloud.compression*.085;
+  const x=cloud.x+cloud.sway*11,y=cloud.y+cloud.compression*7;
+  g.push();g.noStroke();g.translate(Math.round(x),Math.round(y));g.scale(sx,sy);
+  drawCloudBackLobes(g,cloud);
+  if(cloud.texture){if(cloud.depth<.9)g.tint(206,224,215,250);g.image(cloud.texture,-cloud.texture.width/2,-cloud.texture.height/2);g.noTint();}
+  drawCloudFacingPlanes(g,cloud);
+  drawCloudMaterial(g,cloud);
+  g.pop();
+}
+
+function drawCloudBackLobes(g,cloud){
+  g.noStroke();
+  cloud.blobs.forEach((blob,index)=>{
+    if(index%2!==0)return;
+    fillHex(g,PALETTE.cloud0,cloud.depth>.9?62:49);
+    g.ellipse(Math.round((blob.x+10)/3)*3,Math.round((blob.y+14)/3)*3,Math.round(blob.rx*1.94/3)*3,Math.round(blob.ry*1.94/3)*3);
+  });
+}
+
+function drawCloudFacingPlanes(g,cloud){
+  g.noStroke();
+  cloud.blobs.forEach((blob,index)=>{
+    if(index%3!==1)return;
+    fillHex(g,PALETTE.cloud5,cloud.depth>.9?28:20);
+    const x=Math.round((blob.x-blob.rx*.34)/3)*3,y=Math.round((blob.y-blob.ry*.42)/3)*3;
+    g.rect(x,y,Math.max(6,Math.round(blob.rx*.42/3)*3),3);
+  });
+}
+
+function drawCloudMaterial(g,cloud) {
+  const visible=clamp(Math.max(cloud.energy,Math.abs(cloud.compression)*.75),0,1);
+  if(visible<.025)return;
+  const tx=Math.round(clamp(cloud.touch.x-cloud.x,-cloud.w*.28,cloud.w*.28)/3)*3;
+  const ty=Math.round(clamp(cloud.touch.y-cloud.y,-cloud.h*.24,cloud.h*.18)/3)*3;
+  const drain=Math.round(cloud.drainX/3)*3;
+  const fold=clamp(cloud.wetFold,0,1);
+  g.noStroke();
+  if(fold>.025){
+    fillHex(g,PALETTE.cloud2,24+fold*58);g.ellipse(drain-5,Math.round(cloud.h*.10),72,32);
+    fillHex(g,PALETTE.cloud1,20+fold*55);g.ellipse(drain+2,Math.round(cloud.h*.18),52,28);
+    fillHex(g,PALETTE.cloud2,18+fold*45);g.ellipse(drain,Math.round(cloud.h*.25),34,19);
+  }
+  fillHex(g,PALETTE.cloud2,30+visible*70);g.ellipse(tx+5,ty+5,48+visible*12,16+visible*6);
+  fillHex(g,PALETTE.cloud1,22+visible*62);g.ellipse(tx+6,ty+7,27+visible*9,8+visible*4);
+  fillHex(g,PALETTE.cloud5,30+visible*92);g.rect(tx-20,ty-7,24,3);g.rect(tx-20,ty-4,6,5);
+  const underGlow=clamp(cloud.energy*.36+water.light*.08,0,1);
+  if(underGlow>.03){fillHex(g,PALETTE.cobaltLight,underGlow*58);g.rect(drain-39,Math.round(cloud.h*.35),78,3);fillHex(g,PALETTE.cobaltWhite,underGlow*38);g.rect(drain-16,Math.round(cloud.h*.35)-2,32,2);}
+}
+
+function drawRain(g) {
+  g.noStroke();
+  rainDrops.forEach(drop=>{
+    const cloud=clouds[drop.cloudIndex];if(drop.rank>cloud.rainRate)return;
+    const dropDepth=clamp(drop.depth*cloud.depth,.35,1);
+    const emitter=cloud.emitters[drop.emitterIndex]*(.78-cloud.energy*.20);
+    const x=Math.round(cloud.x+cloud.drainX+emitter+drop.xJitter+cloud.sway*10+(1-dropDepth)*4),y=Math.round(drop.y);
+    const len=Math.max(6,Math.round(drop.length*(.58+cloud.energy*.68)*(0.65+dropDepth*.48)/3)*3);
+    const thick=dropDepth>.84?3:dropDepth>.66?2:1;
+    const alpha=Math.round(62+dropDepth*150+cloud.energy*28);
+    fillHex(g,dropDepth>.84?PALETTE.cobalt:PALETTE.cobaltMid,alpha);g.rect(x,y-len,thick,Math.max(3,Math.round(len*.62/3)*3));
+    fillHex(g,PALETTE.cobaltLight,Math.round(alpha*.72));g.rect(x,y-Math.round(len*.38/3)*3,Math.max(1,thick-1),Math.max(3,Math.round(len*.23/3)*3));
+    fillHex(g,PALETTE.cobaltWhite,Math.round(alpha*.62));g.rect(x,y-3,1,3);
+  });
+  clouds.forEach(cloud=>{if(!cloud.lateDrop.active)return;const y=Math.round(cloud.lateDrop.y),x=Math.round(cloud.lateDrop.x);fillHex(g,PALETTE.cobalt,230);g.rect(x,y-15,3,15);fillHex(g,PALETTE.cobaltLight,170);g.rect(x,y-15,1,5);});
+}
+
+function drawPool(g) {
+  g.noStroke();
+  g.fill(19,29,27,185);g.quad(44,GEO.poolBackY+17,676,GEO.poolBackY+17,706,936,14,936);
+  g.fill(PALETTE.stone3);g.quad(GEO.poolOuterLeft,GEO.poolBackY,GEO.poolOuterRight,GEO.poolBackY,690,930,30,930);
+  g.fill(PALETTE.stone4);g.quad(GEO.poolOuterLeft,GEO.poolBackY,GEO.poolOuterRight,GEO.poolBackY,641,GEO.poolWaterY,111,GEO.poolWaterY);
+  g.fill(PALETTE.stone0);g.quad(82,GEO.poolBackY+17,638,GEO.poolBackY+17,662,914,58,914);
+  g.fill(20,73,101,45+water.light*45);g.quad(91,GEO.poolBackY+24,629,GEO.poolBackY+24,GEO.poolWaterRightTop,GEO.poolWaterY,GEO.poolWaterLeftTop,GEO.poolWaterY);
+  g.fill(76,158,190,35+water.light*46);g.quad(105,GEO.poolWaterY-18,615,GEO.poolWaterY-18,604,GEO.poolWaterY,116,GEO.poolWaterY);
+  g.fill(PALETTE.cobaltDeep);g.quad(GEO.poolWaterLeftTop,GEO.poolWaterY,GEO.poolWaterRightTop,GEO.poolWaterY,GEO.poolWaterRightBottom,GEO.poolBottomY,GEO.poolWaterLeftBottom,GEO.poolBottomY);
+  g.fill(78,175,229,78+water.light*30);g.quad(GEO.poolWaterLeftTop,GEO.poolWaterY,GEO.poolWaterLeftTop+8,GEO.poolWaterY+2,GEO.poolWaterLeftBottom+10,GEO.poolBottomY-8,GEO.poolWaterLeftBottom,GEO.poolBottomY);
+  g.fill(3,38,101,82);g.quad(GEO.poolWaterRightTop-8,GEO.poolWaterY+2,GEO.poolWaterRightTop,GEO.poolWaterY,GEO.poolWaterRightBottom,GEO.poolBottomY,GEO.poolWaterRightBottom-10,GEO.poolBottomY-8);
+  g.fill(17,82,157,58);g.quad(GEO.poolWaterLeftTop+8,GEO.poolWaterY+36,GEO.poolWaterRightTop-8,GEO.poolWaterY+36,GEO.poolWaterRightBottom-10,GEO.poolWaterY+74,GEO.poolWaterLeftBottom+10,GEO.poolWaterY+74);
+  g.fill(3,44,111,72);g.quad(GEO.poolWaterLeftBottom+5,GEO.poolWaterY+78,GEO.poolWaterRightBottom-5,GEO.poolWaterY+78,GEO.poolWaterRightBottom,GEO.poolBottomY-9,GEO.poolWaterLeftBottom,GEO.poolBottomY-9);
+  const glow=water.light;
+  g.fill(10,88+glow*35,190+glow*45);g.quad(GEO.poolWaterLeftTop,GEO.poolWaterY,GEO.poolWaterRightTop,GEO.poolWaterY,GEO.poolWaterRightTop+8,GEO.poolWaterY+39,GEO.poolWaterLeftTop-8,GEO.poolWaterY+39);
+  drawPoolReflections(g);
+  g.noFill();g.stroke(78,175,229,75+glow*55);g.strokeWeight(2);for(let band=0;band<6;band+=1){const y=GEO.poolWaterY+17+band*21;g.beginShape();for(let x=GEO.poolWaterLeftBottom+7;x<=GEO.poolWaterRightBottom-7;x+=13)g.vertex(x,y+Math.sin(x*.034+simTime*.74+band*.9)*(2.2+glow*1.6));g.endShape();}
+  g.noStroke();g.fill(PALETTE.stone4);g.quad(30,930,690,930,699,953,21,953);g.fill(230,221,194,42);g.rect(38,932,644,3);g.fill(PALETTE.stone1);g.rect(28,949,664,11);g.fill(25,36,33,130);g.rect(28,956,664,4);
+  drawWaterEffects(g);
+}
+
+function drawPoolReflections(g){
+  const ctx=g.drawingContext;ctx.save();ctx.beginPath();ctx.moveTo(GEO.poolWaterLeftTop,GEO.poolWaterY);ctx.lineTo(GEO.poolWaterRightTop,GEO.poolWaterY);ctx.lineTo(GEO.poolWaterRightBottom,GEO.poolBottomY);ctx.lineTo(GEO.poolWaterLeftBottom,GEO.poolBottomY);ctx.closePath();ctx.clip();
+  clouds.forEach(cloud=>{
+    cloud.blobs.forEach((blob,index)=>{
+      const rx=Math.max(9,Math.round(blob.rx*.34/3)*3),ry=Math.max(6,Math.round((blob.ry*.11+3)/3)*3);
+      const px=Math.round((cloud.x+blob.x*.72)/3)*3,py=Math.round((833-blob.y*.18+cloud.sway*3)/3)*3;
+      fillHex(g,index%3===0?PALETTE.cobaltLight:PALETTE.cloud2,cloud.depth>.9?17:11);g.rect(px-rx,py-ry,rx*2,ry*2);
+    });
+  });
+  ctx.restore();
+}
+
+function drawWaterEffects(g){g.noFill();ripples.forEach(r=>{strokeHex(g,PALETTE.cobaltLight,r.life*155);g.strokeWeight(r.strength>.72?3:2);g.ellipse(Math.round(r.x),Math.round(r.y),Math.round(r.radius*2.35),Math.max(3,Math.round(r.radius*.43)));});g.noStroke();splashes.forEach(s=>{g.fill(104,204,242,s.life*220);g.rect(Math.round(s.x),Math.round(s.y),s.size,s.size+2);});}
+
+function drawPins(g){clouds.forEach((cloud,index)=>{const x=Math.round(cloud.pinX+cloud.sway*4),y=Math.round(ropeYAt(cloud.pinX)-16),j=cloud.energy*Math.sin(simTime*22+index)*1.5;g.push();g.translate(x,y+j);g.noStroke();g.fill(PALETTE.pegDark);g.rect(-10,-8,23,70);g.fill(PALETTE.peg);g.rect(-7,-11,17,66);g.fill(PALETTE.pegLight);g.rect(-4,-8,5,58);g.fill('#46372b');g.rect(-5,19,11,8);g.fill('#d7b77f');g.rect(-2,21,5,4);g.fill(PALETTE.pegDark);g.rect(-7,51,17,7);g.pop();});}
+
+function resetWorldForQA(){pointer.active=false;pointer.mode=null;pointer.cloud=null;initWorld(FIXED_SEED,false);}
+function triggerPrimaryInteractionForQA(){const c=clouds[0];beginListening(c,c.x-26,c.y-22);pointer.active=true;pointer.mode='cloud';pointer.cloud=c;qaTime=0;}
+function updateWorldForQA(dt){qaTime+=dt;if(qaTime>1.05&&pointer.active){pointer.active=false;releaseCloud(clouds[0]);pointer.mode=null;pointer.cloud=null;}updateWorld(dt);}
+function cloudBounds(c){const hw=c.w*.51*(1+c.compression*.055),hh=c.h*.51*(1-c.compression*.085),x=c.x+c.sway*11,y=c.y+c.compression*7;return [[x-hw,y-hh],[x+hw,y-hh],[x-hw,y+hh],[x+hw,y+hh],[x,y-hh],[x,y+hh]];}
+function worldContains(x,y){return Number.isFinite(x)&&Number.isFinite(y)&&x>=0&&x<=BASE_W&&y>=0&&y<=BASE_H;}
+</script>
+
+<script type="application/pixel-bloom-qa">
+globalThis.__PIXEL_BLOOM_QA__={
+  horizonSeconds:18,dt:1/60,
+  requiredStates:['QUIET','LISTEN','RAIN','RETURN'],terminalStates:['QUIET'],
+  reset(){resetWorldForQA();},begin(){triggerPrimaryInteractionForQA();},step(dt){updateWorldForQA(dt);},state(){return worldState;},
+  entities(){return clouds.map(c=>({id:`cloud-${c.id}`,points:cloudBounds(c)}));},contains(x,y){return worldContains(x,y);},
+  counts(){return [{name:'cloud-count',expected:2,actual:clouds.length},{name:'rain-pool-count',expected:RAIN_POOL_SIZE,actual:rainDrops.length}];}
+};
+</script>
+</body>
+</html>

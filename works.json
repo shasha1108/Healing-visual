@@ -2,8 +2,8 @@
   "repo": "shasha1108/healing-visual-lab",
   "url": "https://github.com/shasha1108/healing-visual-lab",
   "pages": "https://shasha1108.github.io/healing-visual-lab/",
-  "total": 43,
-  "updated": "2026-08-24",
+  "total": 44,
+  "updated": "2026-08-31",
   "description": "Interactive healing H5 experiments — Three.js WebGL, Canvas 2D, GLSL shaders, Web Audio, GSAP, creative coding for emotional design. Most works load Three.js r128 via CDN; silent-translator is the only zero-dependency work.",
   "tech_landscape": {
     "threejs": [
@@ -24,6 +24,7 @@
       "layered-mountains"
     ],
     "canvas_2d": [
+      "cloud-laundry-pool",
       "glow-boat-bottle",
       "paper-boat-release",
       "eternal-bloom",
@@ -141,6 +142,7 @@
       "inkmeditation"
     ],
     "touch_interaction": [
+      "cloud-laundry-pool",
       "ink-in-forms",
       "golden-ripples",
       "glow-boat-bottle",
@@ -182,6 +184,7 @@
       "silent-translator"
     ],
     "p5js": [
+      "cloud-laundry-pool",
       "glow-boat-bottle",
       "paper-boat-release",
       "eternal-bloom",
@@ -1581,6 +1584,40 @@
         "layered-mountains.jpg"
       ],
       "date": "2026-06-11"
+    },
+    {
+      "slug": "cloud-laundry-pool",
+      "title_en": "Cloud Laundry Pool",
+      "title_zh": "晾云池",
+      "tagline": "把潮湿和心事挂起来，让它们慢慢落成一池雨。",
+      "tech": [
+        "p5.js",
+        "Canvas 2D"
+      ],
+      "render": "Canvas2D (p5.js)",
+      "has_audio": false,
+      "has_touch": true,
+      "particle_count": "N/A",
+      "dependencies": 1,
+      "healing_domain": "emotional_release",
+      "keywords": [
+        "p5.js",
+        "canvas 2d",
+        "touch interaction"
+      ],
+      "use_cases": [
+        "p5.js",
+        "canvas 2d",
+        "touch interaction"
+      ],
+      "files": [
+        "cloud-laundry-pool.html",
+        "cloud-laundry-pool.md"
+      ],
+      "preview_assets": [
+        "https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/cloud-laundry-pool/v-efe1196a4ed9/cloud-laundry-pool_1.gif"
+      ],
+      "date": "2026-08-31"
     }
   ]
 }
