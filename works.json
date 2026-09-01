@@ -25,7 +25,6 @@
       "layered-mountains"
     ],
     "canvas_2d": [
-      "tang-sancai-fire",
       "cloud-laundry-pool",
       "glow-boat-bottle",
       "paper-boat-release",
@@ -220,6 +219,51 @@
     ]
   },
   "works": [
+    {
+      "slug": "tang-sancai-fire",
+      "title_en": "Tang Sancai Fire",
+      "title_zh": "三彩釉火 · 洛阳窑记",
+      "tagline": "从白胎到窑火：在一匹唐三彩马身上，留下你的釉色与一则窑记。",
+      "tech": [
+        "Three.js",
+        "Canvas 2D",
+        "WebGL",
+        "Web Audio API",
+        "localStorage"
+      ],
+      "render": "WebGL (Three.js)",
+      "has_audio": true,
+      "has_touch": true,
+      "particle_count": "N/A",
+      "dependencies": 1,
+      "healing_domain": "cognitive",
+      "keywords": [
+        "canvas 2d",
+        "three.js",
+        "webgl",
+        "web audio api",
+        "touch interaction",
+        "localstorage persistence",
+        "glsl shader"
+      ],
+      "use_cases": [
+        "canvas 2d",
+        "three.js",
+        "webgl",
+        "web audio api",
+        "touch interaction",
+        "localstorage persistence",
+        "glsl shader"
+      ],
+      "files": [
+        "tang-sancai-fire.html",
+        "tang-sancai-fire.md"
+      ],
+      "preview_assets": [
+        "https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/tang-sancai-fire/v-7045a7066d41/tang-sancai-fire_1.gif"
+      ],
+      "date": "2026-09-01"
+    },
     {
       "slug": "cloud-laundry-pool",
       "title_en": "Cloud Laundry Pool",
@@ -1623,51 +1667,6 @@
         "layered-mountains.jpg"
       ],
       "date": "2026-06-11"
-    },
-    {
-      "slug": "tang-sancai-fire",
-      "title_en": "Tang Sancai Fire",
-      "title_zh": "三彩釉火 · 洛阳窑记",
-      "tagline": "从白胎到窑火：在一匹唐三彩马身上，留下你的釉色与一则窑记。",
-      "tech": [
-        "Three.js",
-        "Canvas 2D",
-        "WebGL",
-        "Web Audio API",
-        "localStorage"
-      ],
-      "render": "WebGL (Three.js)",
-      "has_audio": true,
-      "has_touch": true,
-      "particle_count": "N/A",
-      "dependencies": 1,
-      "healing_domain": "cognitive",
-      "keywords": [
-        "canvas 2d",
-        "three.js",
-        "webgl",
-        "web audio api",
-        "touch interaction",
-        "localstorage persistence",
-        "glsl shader"
-      ],
-      "use_cases": [
-        "canvas 2d",
-        "three.js",
-        "webgl",
-        "web audio api",
-        "touch interaction",
-        "localstorage persistence",
-        "glsl shader"
-      ],
-      "files": [
-        "tang-sancai-fire.html",
-        "tang-sancai-fire.md"
-      ],
-      "preview_assets": [
-        "https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/tang-sancai-fire/v-7045a7066d41/tang-sancai-fire_1.gif"
-      ],
-      "date": "2026-09-01"
     }
   ]
 }
