@@ -2,8 +2,8 @@
   "repo": "shasha1108/healing-visual-lab",
   "url": "https://github.com/shasha1108/healing-visual-lab",
   "pages": "https://shasha1108.github.io/healing-visual-lab/",
-  "total": 45,
-  "updated": "2026-09-01",
+  "total": 46,
+  "updated": "2026-09-04",
   "description": "Interactive healing H5 experiments — Three.js WebGL, Canvas 2D, GLSL shaders, Web Audio, GSAP, creative coding for emotional design. Most works load Three.js r128 via CDN; silent-translator is the only zero-dependency work.",
   "tech_landscape": {
     "threejs": [
@@ -25,6 +25,7 @@
       "layered-mountains"
     ],
     "canvas_2d": [
+      "streetlamp-slow-rain",
       "cloud-laundry-pool",
       "glow-boat-bottle",
       "paper-boat-release",
@@ -76,6 +77,7 @@
       "layered-mountains"
     ],
     "web_audio": [
+      "streetlamp-slow-rain",
       "tang-sancai-fire",
       "glow-boat-bottle",
       "magpie-bridge-heist",
@@ -145,6 +147,7 @@
       "inkmeditation"
     ],
     "touch_interaction": [
+      "streetlamp-slow-rain",
       "tang-sancai-fire",
       "cloud-laundry-pool",
       "ink-in-forms",
@@ -188,6 +191,7 @@
       "silent-translator"
     ],
     "p5js": [
+      "streetlamp-slow-rain",
       "cloud-laundry-pool",
       "glow-boat-bottle",
       "paper-boat-release",
@@ -1667,6 +1671,43 @@
         "layered-mountains.jpg"
       ],
       "date": "2026-06-11"
+    },
+    {
+      "slug": "streetlamp-slow-rain",
+      "title_en": "Streetlamp Slow Rain",
+      "title_zh": "路灯周围，雨会慢一点",
+      "tagline": "末班车走远后，最后一盏旧路灯还亮着。按住光，让灯下的雨慢一点。",
+      "tech": [
+        "p5.js",
+        "Canvas 2D",
+        "Web Audio API"
+      ],
+      "render": "Canvas2D (p5.js)",
+      "has_audio": true,
+      "has_touch": true,
+      "particle_count": "N/A",
+      "dependencies": 1,
+      "healing_domain": "emotional_release",
+      "keywords": [
+        "p5.js",
+        "canvas 2d",
+        "web audio api",
+        "touch interaction"
+      ],
+      "use_cases": [
+        "p5.js",
+        "canvas 2d",
+        "web audio api",
+        "touch interaction"
+      ],
+      "files": [
+        "streetlamp-slow-rain.html",
+        "streetlamp-slow-rain.md"
+      ],
+      "preview_assets": [
+        "https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/streetlamp-slow-rain/v-b29665ccaa4b/streetlamp-slow-rain_1.gif"
+      ],
+      "date": "2026-09-04"
     }
   ]
 }
