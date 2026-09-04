@@ -224,6 +224,43 @@
   },
   "works": [
     {
+      "slug": "streetlamp-slow-rain",
+      "title_en": "Streetlamp Slow Rain",
+      "title_zh": "路灯周围，雨会慢一点",
+      "tagline": "末班车走远后，最后一盏旧路灯还亮着。按住光，让灯下的雨慢一点。",
+      "tech": [
+        "p5.js",
+        "Canvas 2D",
+        "Web Audio API"
+      ],
+      "render": "Canvas2D (p5.js)",
+      "has_audio": true,
+      "has_touch": true,
+      "particle_count": "N/A",
+      "dependencies": 1,
+      "healing_domain": "emotional_release",
+      "keywords": [
+        "p5.js",
+        "canvas 2d",
+        "web audio api",
+        "touch interaction"
+      ],
+      "use_cases": [
+        "p5.js",
+        "canvas 2d",
+        "web audio api",
+        "touch interaction"
+      ],
+      "files": [
+        "streetlamp-slow-rain.html",
+        "streetlamp-slow-rain.md"
+      ],
+      "preview_assets": [
+        "https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/streetlamp-slow-rain/v-b29665ccaa4b/streetlamp-slow-rain_1.gif"
+      ],
+      "date": "2026-09-04"
+    },
+    {
       "slug": "tang-sancai-fire",
       "title_en": "Tang Sancai Fire",
       "title_zh": "三彩釉火 · 洛阳窑记",
@@ -1671,43 +1708,6 @@
         "layered-mountains.jpg"
       ],
       "date": "2026-06-11"
-    },
-    {
-      "slug": "streetlamp-slow-rain",
-      "title_en": "Streetlamp Slow Rain",
-      "title_zh": "路灯周围，雨会慢一点",
-      "tagline": "末班车走远后，最后一盏旧路灯还亮着。按住光，让灯下的雨慢一点。",
-      "tech": [
-        "p5.js",
-        "Canvas 2D",
-        "Web Audio API"
-      ],
-      "render": "Canvas2D (p5.js)",
-      "has_audio": true,
-      "has_touch": true,
-      "particle_count": "N/A",
-      "dependencies": 1,
-      "healing_domain": "emotional_release",
-      "keywords": [
-        "p5.js",
-        "canvas 2d",
-        "web audio api",
-        "touch interaction"
-      ],
-      "use_cases": [
-        "p5.js",
-        "canvas 2d",
-        "web audio api",
-        "touch interaction"
-      ],
-      "files": [
-        "streetlamp-slow-rain.html",
-        "streetlamp-slow-rain.md"
-      ],
-      "preview_assets": [
-        "https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/streetlamp-slow-rain/v-b29665ccaa4b/streetlamp-slow-rain_1.gif"
-      ],
-      "date": "2026-09-04"
     }
   ]
 }
