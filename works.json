@@ -2,8 +2,8 @@
   "repo": "shasha1108/healing-visual-lab",
   "url": "https://github.com/shasha1108/healing-visual-lab",
   "pages": "https://shasha1108.github.io/healing-visual-lab/",
-  "total": 46,
-  "updated": "2026-09-04",
+  "total": 47,
+  "updated": "2026-09-05",
   "description": "Interactive healing H5 experiments — Three.js WebGL, Canvas 2D, GLSL shaders, Web Audio, GSAP, creative coding for emotional design. Most works load Three.js r128 via CDN; silent-translator is the only zero-dependency work.",
   "tech_landscape": {
     "threejs": [
@@ -25,6 +25,7 @@
       "layered-mountains"
     ],
     "canvas_2d": [
+      "duskfirefly-bottle",
       "streetlamp-slow-rain",
       "cloud-laundry-pool",
       "glow-boat-bottle",
@@ -77,6 +78,7 @@
       "layered-mountains"
     ],
     "web_audio": [
+      "duskfirefly-bottle",
       "streetlamp-slow-rain",
       "tang-sancai-fire",
       "glow-boat-bottle",
@@ -147,6 +149,7 @@
       "inkmeditation"
     ],
     "touch_interaction": [
+      "duskfirefly-bottle",
       "streetlamp-slow-rain",
       "tang-sancai-fire",
       "cloud-laundry-pool",
@@ -191,6 +194,7 @@
       "silent-translator"
     ],
     "p5js": [
+      "duskfirefly-bottle",
       "streetlamp-slow-rain",
       "cloud-laundry-pool",
       "glow-boat-bottle",
@@ -1708,6 +1712,43 @@
         "layered-mountains.jpg"
       ],
       "date": "2026-06-11"
+    },
+    {
+      "slug": "duskfirefly-bottle",
+      "title_en": "Duskfirefly Bottle",
+      "title_zh": "把未熄的交给夜",
+      "tagline": "海退回时，把一只漂流瓶留在湿沙上——瓶里还有没熄的萤火，交给夜来认领。",
+      "tech": [
+        "p5.js",
+        "Canvas 2D",
+        "Web Audio API"
+      ],
+      "render": "Canvas2D (p5.js)",
+      "has_audio": true,
+      "has_touch": true,
+      "particle_count": "N/A",
+      "dependencies": 1,
+      "healing_domain": "emotional_release",
+      "keywords": [
+        "p5.js",
+        "canvas 2d",
+        "web audio api",
+        "touch interaction"
+      ],
+      "use_cases": [
+        "p5.js",
+        "canvas 2d",
+        "web audio api",
+        "touch interaction"
+      ],
+      "files": [
+        "duskfirefly-bottle.html",
+        "duskfirefly-bottle.md"
+      ],
+      "preview_assets": [
+        "https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/duskfirefly-bottle/v-3b97fc312354/duskfirefly-bottle_1.gif"
+      ],
+      "date": "2026-09-05"
     }
   ]
 }
