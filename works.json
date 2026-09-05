@@ -228,6 +228,43 @@
   },
   "works": [
     {
+      "slug": "duskfirefly-bottle",
+      "title_en": "Duskfirefly Bottle",
+      "title_zh": "把未熄的交给夜",
+      "tagline": "海退回时，把一只漂流瓶留在湿沙上——瓶里还有没熄的萤火，交给夜来认领。",
+      "tech": [
+        "p5.js",
+        "Canvas 2D",
+        "Web Audio API"
+      ],
+      "render": "Canvas2D (p5.js)",
+      "has_audio": true,
+      "has_touch": true,
+      "particle_count": "N/A",
+      "dependencies": 1,
+      "healing_domain": "emotional_release",
+      "keywords": [
+        "p5.js",
+        "canvas 2d",
+        "web audio api",
+        "touch interaction"
+      ],
+      "use_cases": [
+        "p5.js",
+        "canvas 2d",
+        "web audio api",
+        "touch interaction"
+      ],
+      "files": [
+        "duskfirefly-bottle.html",
+        "duskfirefly-bottle.md"
+      ],
+      "preview_assets": [
+        "https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/duskfirefly-bottle/v-3b97fc312354/duskfirefly-bottle_1.gif"
+      ],
+      "date": "2026-09-05"
+    },
+    {
       "slug": "streetlamp-slow-rain",
       "title_en": "Streetlamp Slow Rain",
       "title_zh": "路灯周围，雨会慢一点",
@@ -1712,43 +1749,6 @@
         "layered-mountains.jpg"
       ],
       "date": "2026-06-11"
-    },
-    {
-      "slug": "duskfirefly-bottle",
-      "title_en": "Duskfirefly Bottle",
-      "title_zh": "把未熄的交给夜",
-      "tagline": "海退回时，把一只漂流瓶留在湿沙上——瓶里还有没熄的萤火，交给夜来认领。",
-      "tech": [
-        "p5.js",
-        "Canvas 2D",
-        "Web Audio API"
-      ],
-      "render": "Canvas2D (p5.js)",
-      "has_audio": true,
-      "has_touch": true,
-      "particle_count": "N/A",
-      "dependencies": 1,
-      "healing_domain": "emotional_release",
-      "keywords": [
-        "p5.js",
-        "canvas 2d",
-        "web audio api",
-        "touch interaction"
-      ],
-      "use_cases": [
-        "p5.js",
-        "canvas 2d",
-        "web audio api",
-        "touch interaction"
-      ],
-      "files": [
-        "duskfirefly-bottle.html",
-        "duskfirefly-bottle.md"
-      ],
-      "preview_assets": [
-        "https://raw.githubusercontent.com/shasha1108/healing-visual-previews/main/duskfirefly-bottle/v-3b97fc312354/duskfirefly-bottle_1.gif"
-      ],
-      "date": "2026-09-05"
     }
   ]
 }
